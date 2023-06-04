@@ -6,13 +6,19 @@ mod branches;
 mod bitops;
 mod memory_controller;
 
+use std::marker::PhantomData;
+
 use bitfield::Bit;
 
-use super::{regfile::RegisterFile, mcu_model::McuModel, io_controller::IoController, sreg::StatusRegister, bit_helpers::bit_field_combined};
+use super::{regfile::RegisterFile, mcu_model::McuModel, io_controller::{IoController, IoControllerTrait}, sreg::StatusRegister, bit_helpers::bit_field_combined};
 
-pub struct Mcu<M: McuModel> {
+pub struct Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
     reg_file: RegisterFile,
-    io: IoController<M>,
+    io: Io,
     sram: Vec<u8>,
     flash: Vec<u16>,
 
@@ -22,15 +28,31 @@ pub struct Mcu<M: McuModel> {
 
     rampz: u8,
     eind: u8,
+
+    model: PhantomData<M>,
 }
 
 const SRAM_SIZE: usize = 8192;
 
-impl<M: McuModel> Mcu<M> {
-    pub fn new() -> Mcu<M> {
+impl<M> Default for Mcu<M, IoController<M>>
+where
+    M: McuModel + 'static,
+{
+    fn default() -> Mcu<M, IoController<M>> {
+        let io = IoController::new();
+        Mcu::new(io)
+    }
+}
+
+impl<M, Io> Mcu<M, Io> 
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
+    pub fn new(io: Io) -> Mcu<M, Io> {
         Mcu { 
             reg_file: RegisterFile::new(),
-            io: IoController::new(),
+            io: io,
             sram: vec![0; SRAM_SIZE],
             flash: vec![0; M::flash_size()],
 
@@ -39,6 +61,8 @@ impl<M: McuModel> Mcu<M> {
             rampz: 0,
             eind: 0,
             sreg: StatusRegister(0),
+
+            model: PhantomData
         }
     }
 
@@ -193,11 +217,15 @@ impl<M: McuModel> Mcu<M> {
 
 #[cfg(test)]
 mod test_helper {
-    use crate::mcu::avr::{mcu_model::McuModel, sreg::test_helper::assert_sreg};
+    use crate::mcu::avr::{mcu_model::McuModel, sreg::test_helper::assert_sreg, io_controller::IoControllerTrait};
 
     use super::Mcu;
 
-    impl<M: McuModel> Mcu<M> {
+    impl<M, Io> Mcu<M, Io> 
+    where
+        M: McuModel + 'static,
+        Io: IoControllerTrait, 
+    {
         pub fn execute_and_assert_sreg(&mut self, opcode: u16, sreg_mask: &'static str) {
             let sreg_initial = self.sreg;
             self.execute(opcode);

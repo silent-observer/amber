@@ -1,10 +1,14 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::get_rd_fields};
+use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::get_rd_fields, io_controller::IoControllerTrait};
 
 use super::{Mcu};
 
-impl<M:McuModel> Mcu<M> {
+impl<M, Io> Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
     pub fn instr_mul(&mut self, opcode: u16) -> u8 {
         let (r, d) = get_rd_fields(opcode, 5);
         let rr = self.read_register(r);

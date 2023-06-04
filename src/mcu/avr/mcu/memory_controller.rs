@@ -1,8 +1,12 @@
-use crate::mcu::avr::mcu_model::McuModel;
+use crate::mcu::avr::{mcu_model::McuModel, io_controller::IoControllerTrait};
 
 use super::{SRAM_SIZE, Mcu};
 
-impl<M:McuModel> Mcu<M> {
+impl<M, Io> Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
     pub fn read_register(&self, i: u16) -> u8 {
         assert!(i < 32);
         self.reg_file.regs[i as usize]
@@ -92,7 +96,7 @@ mod tests {
 
     #[test]
     fn memory_reads() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.flash[0..4].clone_from_slice(&[1, 2, 3, 4]);
         mcu.sram[0..4].clone_from_slice(&[5, 6, 7, 8]);
         mcu.reg_file.regs[0..4].clone_from_slice(&[9, 10, 11, 12]);
@@ -115,7 +119,7 @@ mod tests {
 
     #[test]
     fn memory_writes() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
 
         mcu.write_flash(0x0, 1);
         mcu.write_flash(0x1, 2);
@@ -139,7 +143,7 @@ mod tests {
 
     #[test]
     fn memory_extended() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
 
         mcu.rampz = 0x12;
         mcu.eind = 0x34;

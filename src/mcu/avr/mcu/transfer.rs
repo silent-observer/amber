@@ -1,6 +1,6 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{get_rd_fields, bit_field_combined, get_k8, get_d_field, get_io6}};
+use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{get_rd_fields, bit_field_combined, get_k8, get_d_field, get_io6}, io_controller::IoControllerTrait};
 
 use super::{Mcu};
 
@@ -8,7 +8,11 @@ const X_REG: u16 = 26;
 const Y_REG: u16 = 28;
 const Z_REG: u16 = 30;
 
-impl<M:McuModel> Mcu<M> {
+impl<M, Io> Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
     pub fn instr_mov(&mut self, opcode: u16) -> u8 {
         let (r, d) = get_rd_fields(opcode, 5);
         let rr = self.read_register(r);

@@ -1,10 +1,14 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{get_rd_fields, get_d_field, get_k6, get_k8}};
+use crate::mcu::avr::{bit_helpers::{get_rd_fields, get_d_field, get_k6, get_k8}, mcu_model::McuModel, io_controller::IoControllerTrait};
 
 use super::Mcu;
 
-impl<M:McuModel> Mcu<M> {
+impl<M, Io> Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
 
     fn status_add(&mut self, rd: u8, rr: u8, r: u8) {
         let rd7 = rd.bit(7);
@@ -229,13 +233,13 @@ impl<M:McuModel> Mcu<M> {
 
 #[cfg(test)]
 mod tests {
-    use crate::mcu::avr::{mcu_model::Atmega2560, sreg::test_helper::assert_sreg};
+    use crate::mcu::avr::mcu_model::Atmega2560;
 
     use super::*;
 
     #[test]
     fn add() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x12);
         mcu.write_register(15, 0xAB);
         mcu.write_register(3, 0x34);
@@ -269,7 +273,7 @@ mod tests {
 
     #[test]
     fn adc() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x12);
         mcu.write_register(15, 0xAB);
         mcu.write_register(3, 0x34);
@@ -303,7 +307,7 @@ mod tests {
 
     #[test]
     fn adiw() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register_pair(26, 0x1234);
         mcu.write_register_pair(28, 0xABCD);
         mcu.write_register_pair(30, 0xFFE9);
@@ -325,7 +329,7 @@ mod tests {
 
     #[test]
     fn sub() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x12);
         mcu.write_register(15, 0xAB);
         mcu.write_register(3, 0x34);
@@ -360,7 +364,7 @@ mod tests {
 
     #[test]
     fn sbc() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x12);
         mcu.write_register(15, 0xAB);
         mcu.write_register(3, 0x34);
@@ -389,7 +393,7 @@ mod tests {
 
     #[test]
     fn sbiw() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register_pair(26, 0x1234);
         mcu.write_register_pair(28, 0xAB03);
         mcu.write_register_pair(30, 0x0017);
@@ -411,7 +415,7 @@ mod tests {
 
     #[test]
     fn subi() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x57);
         mcu.write_register(18, 0x28);
         mcu.execute_and_assert_sreg(
@@ -437,7 +441,7 @@ mod tests {
 
     #[test]
     fn sbci() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x57);
         mcu.write_register(18, 0x28);
         mcu.execute_and_assert_sreg(
@@ -463,7 +467,7 @@ mod tests {
 
     #[test]
     fn inc() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x57);
         mcu.write_register(5, 0xFE);
         mcu.write_register(6, 0x7F);
@@ -490,7 +494,7 @@ mod tests {
 
     #[test]
     fn dec() {
-        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0xAB);
         mcu.write_register(5, 0x02);
         mcu.write_register(6, 0x80);

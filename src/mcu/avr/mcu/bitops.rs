@@ -1,10 +1,14 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{get_d_field, get_io5, bit_field_combined}};
+use crate::mcu::avr::{bit_helpers::{get_d_field, get_io5, bit_field_combined}, mcu_model::McuModel, io_controller::IoControllerTrait};
 
 use super::{Mcu};
 
-impl<M:McuModel> Mcu<M> {
+impl<M, Io> Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
     pub fn instr_sbi(&mut self, opcode: u16) -> u8 {
         let io = get_io5(opcode);
         let b = opcode & 0x0007;
@@ -111,5 +115,17 @@ impl<M:McuModel> Mcu<M> {
         self.write_register(d, rd);
         self.pc += 1;
         1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::mcu::avr::mcu_model::Atmega2560;
+
+    use super::*;
+
+    #[test]
+    fn sbi() {
+
     }
 }

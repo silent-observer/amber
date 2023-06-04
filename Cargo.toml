@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 bitfield = "0.13.2"
+mockall = "0.11.4"

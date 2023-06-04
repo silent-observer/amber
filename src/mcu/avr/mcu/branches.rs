@@ -1,12 +1,16 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{bit_field_combined, get_rd_fields, is_two_word, get_d_field, get_io5}};
+use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{bit_field_combined, get_rd_fields, is_two_word, get_d_field, get_io5}, io_controller::IoControllerTrait};
 
 use super::{Mcu};
 
 const Z_REG: u16 = 30;
 
-impl<M:McuModel> Mcu<M> {
+impl<M, Io> Mcu<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
     pub fn instr_rjmp(&mut self, opcode: u16) -> u8 {
         let k = opcode & 0x0FFF;
 

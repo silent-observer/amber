@@ -1,14 +1,22 @@
-use super::{mcu::Mcu, mcu_model::McuModel};
+use super::{mcu::Mcu, mcu_model::McuModel, io_controller::{IoControllerTrait, IoController}};
 
-pub struct McuTicker<M: McuModel> {
-    mcu: Mcu<M>,
+pub struct McuTicker<M, Io>
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
+    mcu: Mcu<M, Io>,
     ticks: u8,
 }
 
-impl<M: McuModel> McuTicker<M> {
-    pub fn new() -> McuTicker<M> {
+impl<M> McuTicker<M, IoController<M>>
+where
+    M: McuModel + 'static,
+{
+    pub fn new() -> McuTicker<M, IoController<M>> {
+        let io = IoController::new();
         McuTicker {
-            mcu: Mcu::new(),
+            mcu: Mcu::new(io),
             ticks: 1
         }
     }
