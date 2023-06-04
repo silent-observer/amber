@@ -24,10 +24,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reg_test() {
+    fn reg_read_u16() {
         let mut reg_file = RegisterFile::new();
         reg_file.regs[26] = 0x34;
         reg_file.regs[27] = 0x12;
-        assert_eq!(reg_file.read_u16(26), 0x1234)
+        assert_eq!(reg_file.read_u16(26), 0x1234);
+    }
+
+    #[test]
+    fn reg_write_u16() {
+        let mut reg_file = RegisterFile::new();
+        reg_file.write_u16(26, 0x1234);
+        assert_eq!(reg_file.regs[26], 0x34);
+        assert_eq!(reg_file.regs[27], 0x12);
     }
 }

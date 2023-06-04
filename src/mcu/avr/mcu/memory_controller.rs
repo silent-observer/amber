@@ -83,3 +83,68 @@ impl<M:McuModel> Mcu<M> {
         (self.eind as u32) << 16 | z as u32
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::mcu::avr::mcu_model::Atmega2560;
+
+    use super::*;
+
+    #[test]
+    fn memory_reads() {
+        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+        mcu.flash[0..4].clone_from_slice(&[1, 2, 3, 4]);
+        mcu.sram[0..4].clone_from_slice(&[5, 6, 7, 8]);
+        mcu.reg_file.regs[0..4].clone_from_slice(&[9, 10, 11, 12]);
+
+        assert_eq!(mcu.read_flash(0x0), 1);
+        assert_eq!(mcu.read_flash(0x1), 2);
+        assert_eq!(mcu.read_flash(0x2), 3);
+        assert_eq!(mcu.read_flash(0x3), 4);
+
+        assert_eq!(mcu.read(0x0), 9);
+        assert_eq!(mcu.read(0x1), 10);
+        assert_eq!(mcu.read(0x2), 11);
+        assert_eq!(mcu.read(0x3), 12);
+
+        assert_eq!(mcu.read(0x200), 5);
+        assert_eq!(mcu.read(0x201), 6);
+        assert_eq!(mcu.read(0x202), 7);
+        assert_eq!(mcu.read(0x203), 8);
+    }
+
+    #[test]
+    fn memory_writes() {
+        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+
+        mcu.write_flash(0x0, 1);
+        mcu.write_flash(0x1, 2);
+        mcu.write_flash(0x2, 3);
+        mcu.write_flash(0x3, 4);
+
+        mcu.write(0x200, 5);
+        mcu.write(0x201, 6);
+        mcu.write(0x202, 7);
+        mcu.write(0x203, 8);
+
+        mcu.write(0x0, 9);
+        mcu.write(0x1, 10);
+        mcu.write(0x2, 11);
+        mcu.write(0x3, 12);
+
+        assert_eq!(mcu.flash[0..4], [1, 2, 3, 4]);
+        assert_eq!(mcu.sram[0..4], [5, 6, 7, 8]);
+        assert_eq!(mcu.reg_file.regs[0..4], [9, 10, 11, 12]);
+    }
+
+    #[test]
+    fn memory_extended() {
+        let mut mcu: Mcu<Atmega2560> = Mcu::new();
+
+        mcu.rampz = 0x12;
+        mcu.eind = 0x34;
+        let z = 0x5678_u16;
+        assert_eq!(mcu.rampz_address(z), 0x00125678_u32);
+        assert_eq!(mcu.eind_address(z), 0x00345678_u32);
+    }
+}

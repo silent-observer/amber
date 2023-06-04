@@ -44,6 +44,10 @@ impl<M: McuModel> Mcu<M> {
 
     pub fn step(&mut self) -> u8 {
         let opcode: u16 = self.read_at_pc_offset(0);
+        self.execute(opcode)
+    }
+
+    fn execute(&mut self, opcode: u16) -> u8 {
         let head = (opcode >> 8) as u8;
         match head {
             0x00 => {
@@ -93,7 +97,7 @@ impl<M: McuModel> Mcu<M> {
             },
 
             0x90 | 0x91 => {
-                let tail = opcode as u8;
+                let tail = opcode & 0x000F;
                 match tail {
                     0x0 => self.instr_lds(opcode),
                     0x1 | 0x2 | 0x9 | 0xA | 0xC..=0xE => self.instr_ld(opcode),
@@ -106,7 +110,7 @@ impl<M: McuModel> Mcu<M> {
             },
 
             0x92 | 0x93 => {
-                let tail = opcode as u8;
+                let tail = opcode & 0x000F;
                 match tail {
                     0x0 => self.instr_sts(opcode),
                     0x1 | 0x2 | 0x9 | 0xA | 0xC..=0xE => self.instr_st(opcode),
@@ -117,7 +121,7 @@ impl<M: McuModel> Mcu<M> {
             },
 
             0x94 | 0x95 => {
-                let tail = opcode as u8;
+                let tail = opcode & 0x000F;
                 match tail {
                     0x0 => self.instr_com(opcode),
                     0x1 => self.instr_neg(opcode),
@@ -183,6 +187,21 @@ impl<M: McuModel> Mcu<M> {
             0xFA..=0xFB => self.instr_bst(opcode),
             0xFC..=0xFD => self.instr_sbrc(opcode),
             0xFE..=0xFF => self.instr_sbrs(opcode),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_helper {
+    use crate::mcu::avr::{mcu_model::McuModel, sreg::test_helper::assert_sreg};
+
+    use super::Mcu;
+
+    impl<M: McuModel> Mcu<M> {
+        pub fn execute_and_assert_sreg(&mut self, opcode: u16, sreg_mask: &'static str) {
+            let sreg_initial = self.sreg;
+            self.execute(opcode);
+            assert_sreg(&self.sreg, &sreg_initial, sreg_mask);
         }
     }
 }
