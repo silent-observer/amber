@@ -272,6 +272,46 @@ mod tests {
     }
 
     #[test]
+    fn lsl() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(17, 0x26);
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--000000");
+        assert_eq!(mcu.read_register(17), 0x4C);
+        
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--101100");
+        assert_eq!(mcu.read_register(17), 0x98);
+
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--111001");
+        assert_eq!(mcu.read_register(17), 0x30);
+
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--000000");
+        assert_eq!(mcu.read_register(17), 0x60);
+
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--001100");
+        assert_eq!(mcu.read_register(17), 0xC0);
+
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--010101");
+        assert_eq!(mcu.read_register(17), 0x80);
+
+        mcu.execute_and_assert_sreg(
+            0b0000_11_1_10001_0001, // lsl r17
+            "--011011");
+        assert_eq!(mcu.read_register(17), 0x00);
+    }
+
+    #[test]
     fn adc() {
         let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
         mcu.write_register(17, 0x12);
@@ -303,6 +343,46 @@ mod tests {
             0b0001_11_0_01010_1011, // adc r10, r11
             "--100011");
         assert_eq!(mcu.read_register(10), 0x00);
+    }
+
+    #[test]
+    fn rol() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(17, 0x26);
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--000000");
+        assert_eq!(mcu.read_register(17), 0x4C);
+        
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--101100");
+        assert_eq!(mcu.read_register(17), 0x98);
+
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--111001");
+        assert_eq!(mcu.read_register(17), 0x30);
+
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--000000");
+        assert_eq!(mcu.read_register(17), 0x61);
+
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--001100");
+        assert_eq!(mcu.read_register(17), 0xC2);
+
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--010101");
+        assert_eq!(mcu.read_register(17), 0x84);
+
+        mcu.execute_and_assert_sreg(
+            0b0001_11_1_10001_0001, // rol r17
+            "--011001");
+        assert_eq!(mcu.read_register(17), 0x09);
     }
 
     #[test]

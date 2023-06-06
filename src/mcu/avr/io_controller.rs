@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use mockall::automock;
+use mockall::*;
 
 use super::mcu_model::McuModel;
 

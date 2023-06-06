@@ -99,7 +99,7 @@ where
     }
 
     pub fn instr_bst(&mut self, opcode: u16) -> u8 {
-        let d = get_d_field(opcode, 3);
+        let d = get_d_field(opcode, 5);
         let rd = self.read_register(d);
         let b = opcode & 0x0007;
         self.sreg.set_t(rd.bit(b as usize));
@@ -108,7 +108,7 @@ where
     }
 
     pub fn instr_bld(&mut self, opcode: u16) -> u8 {
-        let d = get_d_field(opcode, 3);
+        let d = get_d_field(opcode, 5);
         let mut rd = self.read_register(d);
         let b = opcode & 0x0007;
         rd.set_bit(b as usize, self.sreg.t());
@@ -120,12 +120,316 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::mcu::avr::mcu_model::Atmega2560;
+    use crate::mcu::avr::{mcu_model::Atmega2560, sreg::StatusRegister};
 
     use super::*;
+    use crate::mcu::avr::io_controller::MockIoControllerTrait;
+    use mockall::predicate::eq;
 
     #[test]
     fn sbi() {
+        let mut io = MockIoControllerTrait::new();
 
+        io.expect_read_internal_u8()
+          .with(eq(15))
+          .return_const(0b10000010);
+        io.expect_write_internal_u8()
+          .with(eq(15), eq(0b10100010));
+
+        io.expect_read_internal_u8()
+          .with(eq(18))
+          .return_const(0b10000110);
+        io.expect_write_internal_u8()
+          .with(eq(18), eq(0b10000110));
+
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::new(io);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_1010_01111_101, // sbi 0x0F, 5
+            "--------");
+
+        mcu.execute_and_assert_sreg(
+            0b1001_1010_10010_010, // sbi 0x12, 2
+            "--------");
+    }
+
+    #[test]
+    fn cbi() {
+        let mut io = MockIoControllerTrait::new();
+
+        io.expect_read_internal_u8()
+          .with(eq(15))
+          .return_const(0b10000010);
+        io.expect_write_internal_u8()
+          .with(eq(15), eq(0b10000010));
+
+        io.expect_read_internal_u8()
+          .with(eq(18))
+          .return_const(0b10000110);
+        io.expect_write_internal_u8()
+          .with(eq(18), eq(0b10000010));
+
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::new(io);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_1000_01111_101, // cbi 0x0F, 5
+            "--------");
+
+        mcu.execute_and_assert_sreg(
+            0b1001_1000_10010_010, // cbi 0x12, 2
+            "--------");
+    }
+
+    #[test]
+    fn lsr() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(21, 0x98);
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x4C);
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x26);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x13);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---11001");
+        assert_eq!(mcu.read_register(21), 0x09);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---11001");
+        assert_eq!(mcu.read_register(21), 0x04);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x02);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x01);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0110, // lsr r21
+            "---11011");
+        assert_eq!(mcu.read_register(21), 0x00);
+    }
+
+    #[test]
+    fn ror() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(21, 0x98);
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x4C);
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x26);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x13);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---11001");
+        assert_eq!(mcu.read_register(21), 0x09);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---10101");
+        assert_eq!(mcu.read_register(21), 0x84);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---01100");
+        assert_eq!(mcu.read_register(21), 0xC2);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---00000");
+        assert_eq!(mcu.read_register(21), 0x61);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0111, // ror r21
+            "---11001");
+        assert_eq!(mcu.read_register(21), 0x30);
+    }
+
+    #[test]
+    fn asr() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(21, 0x98);
+        mcu.write_register(8, 0x37);
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---01100");
+        assert_eq!(mcu.read_register(21), 0xCC);
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---01100");
+        assert_eq!(mcu.read_register(21), 0xE6);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---01100");
+        assert_eq!(mcu.read_register(21), 0xF3);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---10101");
+        assert_eq!(mcu.read_register(21), 0xF9);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---10101");
+        assert_eq!(mcu.read_register(21), 0xFC);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---01100");
+        assert_eq!(mcu.read_register(21), 0xFE);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10101_0101, // asr r21
+            "---01100");
+        assert_eq!(mcu.read_register(21), 0xFF);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_01000_0101, // asr r8
+            "---11001");
+        assert_eq!(mcu.read_register(8), 0x1B);
+    }
+
+    #[test]
+    fn swap() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(22, 0xAB);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10110_0010, // asr r22
+            "--------");
+        assert_eq!(mcu.read_register(22), 0xBA);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_010_10110_0010, // asr r22
+            "--------");
+        assert_eq!(mcu.read_register(22), 0xAB);
+    }
+
+    #[test]
+    fn bset() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_0_001_1000, // bset 1
+            "------1-");
+
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_0_101_1000, // bset 5
+            "--1-----");
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_0_010_1000, // bset 2
+            "-----1--");
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_0_111_1000, // bset 7
+            "1-------");
+    }
+
+    #[test]
+    fn bclr() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.sreg = StatusRegister(0xFF);
+
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_1_001_1000, // bclr 1
+            "------0-");
+
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_1_101_1000, // bclr 5
+            "--0-----");
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_1_010_1000, // bclr 2
+            "-----0--");
+        
+        mcu.execute_and_assert_sreg(
+            0b1001_0100_1_111_1000, // bclr 7
+            "0-------");
+    }
+
+    #[test]
+    fn bst() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(21, 0x98);
+
+        mcu.execute_and_assert_sreg(
+            0b1111_101_10101_0_011, // bst r21, 3
+            "-1------");
+
+        mcu.execute_and_assert_sreg(
+            0b1111_101_10101_0_100, // bst r21, 4
+            "-1------");
+
+        mcu.execute_and_assert_sreg(
+            0b1111_101_10101_0_101, // bst r21, 5
+            "-0------");
+        
+        mcu.execute_and_assert_sreg(
+            0b1111_101_10101_0_110, // bst r21, 6
+            "-0------");
+        
+        mcu.execute_and_assert_sreg(
+            0b1111_101_10101_0_111, // bst r21, 7
+            "-1------");
+    }
+
+    #[test]
+    fn bld() {
+        let mut mcu: Mcu<Atmega2560, _> = Mcu::default();
+        mcu.write_register(21, 0x98);
+
+        mcu.execute_and_assert_sreg(
+            0b1111_100_10101_0_011, // bld r21, 3
+            "--------");
+        assert_eq!(mcu.read_register(21), 0x90);
+
+        mcu.execute_and_assert_sreg(
+            0b1111_100_10101_0_100, // bst r21, 4
+            "--------");
+        assert_eq!(mcu.read_register(21), 0x80);
+        
+        mcu.sreg.set_t(true);
+        mcu.execute_and_assert_sreg(
+            0b1111_100_10101_0_101, // bst r21, 5
+            "--------");
+        assert_eq!(mcu.read_register(21), 0xA0);
+        
+        mcu.execute_and_assert_sreg(
+            0b1111_100_10101_0_110, // bst r21, 6
+            "--------");
+        assert_eq!(mcu.read_register(21), 0xE0);
+        
+        mcu.execute_and_assert_sreg(
+            0b1111_100_10101_0_111, // bst r21, 7
+            "--------");
+        assert_eq!(mcu.read_register(21), 0xE0);
     }
 }
