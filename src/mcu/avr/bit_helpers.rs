@@ -16,7 +16,7 @@ pub fn bit_field_combined(x: u16, data: &'static[RangeInclusive<usize>]) -> u16 
 
 pub fn get_r_field(opcode: u16, size: usize) -> u16 {
     match size {
-        3 => 0x18 | bit_field_combined(opcode, &[2..=0]),
+        3 => 0x10 | bit_field_combined(opcode, &[2..=0]),
         4 => 0x10 | bit_field_combined(opcode, &[3..=0]),
         5 => bit_field_combined(opcode, &[9..=9, 3..=0]),
         _ => panic!("Invalid R field size"),
@@ -26,7 +26,7 @@ pub fn get_r_field(opcode: u16, size: usize) -> u16 {
 pub fn get_d_field(opcode: u16, size: usize) -> u16 {
     match size {
         2 => 0x18 | bit_field_combined(opcode, &[5..=4]) << 1,
-        3 => 0x18 | bit_field_combined(opcode, &[6..=4]),
+        3 => 0x10 | bit_field_combined(opcode, &[6..=4]),
         4 => 0x10 | bit_field_combined(opcode, &[7..=4]),
         5 => bit_field_combined(opcode, &[8..=4]),
         _ => panic!("Invalid R field size"),
