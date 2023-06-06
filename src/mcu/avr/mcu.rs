@@ -114,7 +114,7 @@ where
             0x70..=0x7F => self.instr_andi(opcode),
 
             0x80..=0x8F |
-            0xA0..=0xAF => if head.bit(0) {
+            0xA0..=0xAF => if head.bit(1) {
                 self.instr_std(opcode)
             } else {
                 self.instr_ldd(opcode)
