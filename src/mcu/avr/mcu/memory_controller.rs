@@ -7,6 +7,10 @@ where
     M: McuModel + 'static,
     Io: IoControllerTrait,
 {
+    pub fn set_pc(&mut self, val: u32) {
+        self.pc = val % M::flash_size() as u32;
+    }
+
     pub fn read_register(&self, i: u16) -> u8 {
         assert!(i < 32);
         self.reg_file.regs[i as usize]
