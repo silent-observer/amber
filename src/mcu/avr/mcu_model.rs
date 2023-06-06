@@ -1,4 +1,4 @@
-pub trait McuModel {
+pub trait McuModel: Send {
     fn flash_size() -> usize;
 }
 

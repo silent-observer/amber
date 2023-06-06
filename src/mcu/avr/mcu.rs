@@ -6,7 +6,7 @@ mod branches;
 mod bitops;
 mod memory_controller;
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData};
 
 use bitfield::Bit;
 
@@ -18,7 +18,7 @@ where
     Io: IoControllerTrait,
 {
     reg_file: RegisterFile,
-    io: Io,
+    pub io: Io,
     sram: Vec<u8>,
     flash: Vec<u16>,
 
@@ -224,7 +224,7 @@ mod test_helper {
     impl<M, Io> Mcu<M, Io> 
     where
         M: McuModel + 'static,
-        Io: IoControllerTrait, 
+        Io: IoControllerTrait,
     {
         pub fn execute_and_assert_sreg(&mut self, opcode: u16, sreg_mask: &'static str) {
             let sreg_initial = self.sreg;

@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 bitfield = "0.13.2"
+kanal = "0.1.0-pre8"
 mockall = "0.11.4"
