@@ -1,6 +1,6 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{mcu_model::McuModel, bit_helpers::{bit_field_combined, get_rd_fields, is_two_word, get_d_field, get_io5}, io_controller::IoControllerTrait};
+use crate::components::avr::{mcu_model::McuModel, bit_helpers::{bit_field_combined, get_rd_fields, is_two_word, get_d_field, get_io5}, io_controller::IoControllerTrait};
 
 use super::{Mcu};
 
@@ -180,7 +180,7 @@ where
 mod tests {
     use mockall::predicate::eq;
 
-    use crate::mcu::avr::{mcu_model::Atmega2560, io_controller::MockIoControllerTrait, sreg::StatusRegister};
+    use crate::components::avr::{mcu_model::Atmega2560, io_controller::MockIoControllerTrait, sreg::StatusRegister};
 
     use super::*;
 

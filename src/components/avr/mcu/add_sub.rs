@@ -1,6 +1,6 @@
 use bitfield::Bit;
 
-use crate::mcu::avr::{bit_helpers::{get_rd_fields, get_d_field, get_k6, get_k8}, mcu_model::McuModel, io_controller::IoControllerTrait};
+use crate::components::avr::{bit_helpers::{get_rd_fields, get_d_field, get_k6, get_k8}, mcu_model::McuModel, io_controller::IoControllerTrait};
 
 use super::Mcu;
 
@@ -233,7 +233,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::mcu::avr::mcu_model::Atmega2560;
+    use crate::components::avr::mcu_model::Atmega2560;
 
     use super::*;
 

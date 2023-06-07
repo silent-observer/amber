@@ -1,4 +1,4 @@
-use crate::mcu::avr::{mcu_model::McuModel, io_controller::IoControllerTrait};
+use crate::components::avr::{mcu_model::McuModel, io_controller::IoControllerTrait};
 
 use super::{SRAM_SIZE, Mcu};
 
@@ -94,7 +94,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::mcu::avr::mcu_model::Atmega2560;
+    use crate::components::avr::mcu_model::Atmega2560;
 
     use super::*;
 

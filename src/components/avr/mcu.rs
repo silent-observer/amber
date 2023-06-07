@@ -217,7 +217,7 @@ where
 
 #[cfg(test)]
 mod test_helper {
-    use crate::mcu::avr::{mcu_model::McuModel, sreg::test_helper::assert_sreg, io_controller::IoControllerTrait};
+    use crate::components::avr::{mcu_model::McuModel, sreg::test_helper::assert_sreg, io_controller::IoControllerTrait};
 
     use super::Mcu;
 

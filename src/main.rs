@@ -1,4 +1,4 @@
-use amber::{board::Board, mcu::avr::{mcu_ticker::McuTicker, mcu_model::Atmega2560}};
+use amber::{board::Board, components::avr::{mcu_ticker::McuTicker, mcu_model::Atmega2560}};
 
 fn main() {
     let mut board = Board::new();
