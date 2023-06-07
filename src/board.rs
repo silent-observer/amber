@@ -3,9 +3,10 @@ use kanal;
 
 use crate::pins::{PinId, PinState};
 
+#[derive(Debug, Clone, Copy)]
 pub enum Message {
     Step,
-    Done,
+    Done(ComponentId),
     Die,
     PinChange(ComponentId, PinId, PinState)
 }
@@ -185,9 +186,11 @@ impl Board {
         let wire_id = WireId(self.wires.len());
         for &(ComponentId(component_id), pin_id) in pins {
             let index = self.pin_table[component_id][pin_id as usize];
-            let pin = &self.pins[index];
+            let pin = &mut self.pins[index];
             wire.pins.push(index);
             wire.counter.add(pin.out_state);
+            assert!(pin.wire.is_none(), "Cannot connect two wires to the same pin!");
+            pin.wire = Some(wire_id);
         }
         let wire_state = wire.read();
         self.wires.push(wire);
@@ -275,9 +278,10 @@ impl Board {
         'outer_loop:
         loop {
             for m in &mut output_rx {
+                println!("Got message: {:?}", m);
                 match m {
                     Message::Step | Message::Die => {}
-                    Message::Done => {
+                    Message::Done(_comp) => {
                         done_counter -= 1;
                         if done_counter == 0 {break 'outer_loop;}
                     }

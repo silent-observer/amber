@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{board::{ComponentId, Message, Board}, pins::{PinId, PinState}};
 use kanal;
 
@@ -5,26 +7,29 @@ pub trait Component: Send {
     fn pin_count() -> usize;
     fn advance(&mut self);
     fn set_pin(&mut self, pin: PinId, state: PinState);
-    fn get_pin_output_changes(&self) -> &[(PinId, PinState)];
-    fn reset_pins(&mut self);
+    fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>);
 
     fn execute_loop(&mut self,
                     id: ComponentId,
                     output_tx: kanal::Sender<Message>,
                     input_rx: kanal::Receiver<Message>) {
+        let mut output_changes = HashMap::new();
         for m in input_rx {
+            println!("Component {:?} got a message: {:?}", id, m);
             match m {
                 Message::Die => break,
                 Message::PinChange(_, pin, state) => self.set_pin(pin, state),
-                Message::Done => {},
+                Message::Done(_) => {},
                 Message::Step => {
+                    output_changes.clear();
                     self.advance();
-                    for &(pin, state) in self.get_pin_output_changes() {
+                    self.fill_output_changes(&mut output_changes);
+                    for (&pin, &state) in output_changes.iter() {
                         output_tx.send(Message::PinChange(id, pin, state))
                                  .expect("Cannot send update");
                     }
-                    self.reset_pins();
-                    output_tx.send(Message::Done).expect("Cannot send update");
+                    output_tx.send(Message::Done(id))
+                             .expect("Cannot send update");
                 },
             }
         }

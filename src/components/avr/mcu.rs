@@ -33,6 +33,7 @@ where
 }
 
 const SRAM_SIZE: usize = 8192;
+const SRAM_END: u16 = 0x200 + SRAM_SIZE as u16 - 1;
 
 impl<M> Default for Mcu<M, IoController<M>>
 where
@@ -211,6 +212,12 @@ where
             0xFA..=0xFB => self.instr_bst(opcode),
             0xFC..=0xFD => self.instr_sbrc(opcode),
             0xFE..=0xFF => self.instr_sbrs(opcode),
+        }
+    }
+
+    pub fn load_flash(&mut self, data: &[u16]) {
+        for (addr, &val) in data.iter().enumerate() {
+            self.write_flash(addr as u32, val);
         }
     }
 }

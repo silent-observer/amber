@@ -1,7 +1,15 @@
-use crate::{pins::PinState, component::Component};
+use std::collections::HashMap;
 
-struct Led {
+use crate::{pins::{PinState, PinId}, component::Component};
+
+pub struct Led {
     state: PinState,
+}
+
+impl Led {
+    pub fn new() -> Led {
+        Led { state: PinState::Z }
+    }
 }
 
 impl Component for Led {
@@ -9,18 +17,15 @@ impl Component for Led {
         1
     }
 
-    fn advance(&mut self) {
-        todo!()
-    }
+    fn advance(&mut self) {}
 
-    fn set_pin(&mut self, pin: crate::pins::PinId, state: PinState) {
+    fn set_pin(&mut self, pin: PinId, state: PinState) {
         assert!(pin == 0);
         self.state = state;
+        if self.state == PinState::High || self.state == PinState::Low {
+            println!("LED state: {:?}", self.state);
+        }
     }
 
-    fn get_pin_output_changes(&self) -> &[(crate::pins::PinId, PinState)] {
-        &[]
-    }
-
-    fn reset_pins(&mut self) {}
+    fn fill_output_changes(&mut self, _changes: &mut HashMap<PinId, PinState>) {}
 }

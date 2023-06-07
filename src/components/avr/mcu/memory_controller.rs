@@ -1,6 +1,6 @@
-use crate::components::avr::{mcu_model::McuModel, io_controller::IoControllerTrait};
+use crate::components::avr::{mcu_model::McuModel, io_controller::IoControllerTrait, sreg::StatusRegister};
 
-use super::{SRAM_SIZE, Mcu};
+use super::{Mcu, SRAM_END};
 
 impl<M, Io> Mcu<M, Io>
 where
@@ -32,11 +32,31 @@ where
     }
 
     pub fn read_io(&self, i: u8) -> u8 {
-        self.io.read_internal_u8(i)
+        match i {
+            0x00..=0x3A => self.io.read_internal_u8(i),
+            0x3B => self.rampz,
+            0x3C => self.eind,
+            0x3D => self.sp as u8,
+            0x3E => (self.sp >> 8) as u8,
+            0x3F => {
+                let StatusRegister(x) = self.sreg;
+                x
+            }
+            _ => panic!("Only 64 internal IO registers!")
+        }
+        
     }
 
     pub fn write_io(&mut self, i: u8, val: u8) {
-        self.io.write_internal_u8(i, val)
+        match i {
+            0x00..=0x3A => self.io.write_internal_u8(i, val),
+            0x3B => self.rampz = val & M::rampz_mask(),
+            0x3C => self.eind = val & M::eind_mask(),
+            0x3D => self.sp = self.sp & 0xFF00 | val as u16,
+            0x3E => self.sp = self.sp & 0x00FF | (val as u16) << 8,
+            0x3F => self.sreg = StatusRegister(val),
+            _ => panic!("Only 64 internal IO registers!")
+        }
     }
 
     pub fn read_flash(&self, addr: u32) -> u16 {
@@ -48,28 +68,22 @@ where
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        if addr < 0x20 {
-            self.read_register(addr)
-        } else if addr < 0x60 {
-            self.read_io((addr - 0x20) as u8)
-        } else if addr < 0x200 {
-            self.io.read_external_u8(addr)
-        } else if addr < 0x200 + SRAM_SIZE as u16 {
-            self.sram[addr as usize - 0x200]
-        } else {
-            0
+        match addr {
+            0x0000..=0x001F => self.read_register(addr),
+            0x0020..=0x005F => self.read_io((addr - 0x20) as u8),
+            0x0060..=0x01FF => self.io.read_external_u8(addr),
+            0x0200..=SRAM_END => self.sram[addr as usize - 0x200],
+            _ => 0,
         }
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
-        if addr < 0x20 {
-            self.write_register(addr, val);
-        } else if addr < 0x60 {
-            self.write_io((addr - 0x20) as u8, val);
-        } else if addr < 0x200 {
-            self.io.write_external_u8(addr, val);
-        } else if addr < 0x200 + SRAM_SIZE as u16 {
-            self.sram[addr as usize - 0x200] = val;
+        match addr {
+            0x0000..=0x001F => self.write_register(addr, val),
+            0x0020..=0x005F => self.write_io((addr - 0x20) as u8, val),
+            0x0060..=0x01FF => self.io.write_external_u8(addr, val),
+            0x0200..=SRAM_END => self.sram[addr as usize - 0x200] = val,
+            _ => {},
         }
     }
 

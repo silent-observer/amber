@@ -1,4 +1,6 @@
-use crate::component::Component;
+use std::collections::HashMap;
+
+use crate::{component::Component, pins::{PinId, PinState}};
 
 use super::{mcu::Mcu, mcu_model::McuModel, io_controller::{IoControllerTrait, IoController}};
 
@@ -31,6 +33,10 @@ where
         assert!(self.ticks > 0);
         self.ticks -= 1;
     }
+
+    pub fn load_flash(&mut self, data: &[u16]) {
+        self.mcu.load_flash(data);
+    }
 }
 
 impl<M> Component for McuTicker<M, IoController<M>> 
@@ -47,15 +53,11 @@ where
         }
     }
 
-    fn set_pin(&mut self, pin: crate::pins::PinId, state: crate::pins::PinState) {
+    fn set_pin(&mut self, pin: PinId, state: PinState) {
         self.mcu.io.set_pin(pin, state)
     }
 
-    fn get_pin_output_changes(&self) -> &[(crate::pins::PinId, crate::pins::PinState)] {
-        self.mcu.io.get_pin_output_changes()
-    }
-
-    fn reset_pins(&mut self) {
-        self.mcu.io.reset_pins()
+    fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>) {
+        self.mcu.io.fill_output_changes(changes)
     }
 }

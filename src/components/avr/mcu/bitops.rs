@@ -14,6 +14,7 @@ where
         let b = opcode & 0x0007;
         let mut val = self.read_io(io);
         val.set_bit(b as usize, true);
+        self.write_io(io, val);
 
         self.pc += 1;
         2
@@ -24,6 +25,7 @@ where
         let b = opcode & 0x0007;
         let mut val = self.read_io(io);
         val.set_bit(b as usize, false);
+        self.write_io(io, val);
 
         self.pc += 1;
         2
@@ -132,15 +134,21 @@ mod tests {
 
         io.expect_read_internal_u8()
           .with(eq(15))
-          .return_const(0b10000010);
+          .return_const(0b10000010)
+          .times(1);
         io.expect_write_internal_u8()
-          .with(eq(15), eq(0b10100010));
+          .with(eq(15), eq(0b10100010))
+          .return_const(())
+          .times(1);
 
         io.expect_read_internal_u8()
           .with(eq(18))
-          .return_const(0b10000110);
+          .return_const(0b10000110)
+          .times(1);
         io.expect_write_internal_u8()
-          .with(eq(18), eq(0b10000110));
+          .with(eq(18), eq(0b10000110))
+          .return_const(())
+          .times(1);
 
         let mut mcu: Mcu<Atmega2560, _> = Mcu::new(io);
 
@@ -159,15 +167,21 @@ mod tests {
 
         io.expect_read_internal_u8()
           .with(eq(15))
-          .return_const(0b10000010);
+          .return_const(0b10000010)
+          .times(1);
         io.expect_write_internal_u8()
-          .with(eq(15), eq(0b10000010));
+          .with(eq(15), eq(0b10000010))
+          .return_const(())
+          .times(1);
 
         io.expect_read_internal_u8()
           .with(eq(18))
-          .return_const(0b10000110);
+          .return_const(0b10000110)
+          .times(1);
         io.expect_write_internal_u8()
-          .with(eq(18), eq(0b10000010));
+          .with(eq(18), eq(0b10000010))
+          .return_const(())
+          .times(1);
 
         let mut mcu: Mcu<Atmega2560, _> = Mcu::new(io);
 
