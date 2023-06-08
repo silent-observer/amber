@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use bitfield::Bit;
 
 use crate::pins::{PinState, PinStateConvertible};
-use crate::vcr::{VcrFiller, VcrTreeModule, VcrModuleBuilder};
+use crate::vcd::{VcdFiller, VcdTreeModule, VcdModuleBuilder};
 
 use super::{regfile::RegisterFile, mcu_model::McuModel, io_controller::{IoController, IoControllerTrait}, sreg::StatusRegister, bit_helpers::bit_field_combined};
 
@@ -225,21 +225,21 @@ where
     }
 }
 
-impl<M, Io> VcrFiller for Mcu<M, Io> 
+impl<M, Io> VcdFiller for Mcu<M, Io> 
 where
     M: McuModel + 'static,
     Io: IoControllerTrait,
 {
     const IS_SIGNAL: bool = false;
 
-    fn init_vcr_module(&self, builder: &mut VcrModuleBuilder) {
+    fn init_vcd_module(&self, builder: &mut VcdModuleBuilder) {
         builder.add_signal("clk", 1, PinState::Low);
         builder.add_signal("pc", 32, PinState::Low);
         builder.add_node("regs", &self.reg_file);
         builder.add_node("sreg", &self.sreg);
     }
 
-    fn fill_module(&self, module: &mut VcrTreeModule) {
+    fn fill_module(&self, module: &mut VcdTreeModule) {
         module.update_subsignal("clk", self.io.clock_pin().to_pin_vec());
         module.update_subsignal("pc", self.pc.to_pin_vec());
         module.update_child("regs", &self.reg_file);

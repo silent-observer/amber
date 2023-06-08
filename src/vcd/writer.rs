@@ -3,30 +3,30 @@ use std::{io::BufWriter, fs::File};
 
 use crate::pins::PinState;
 
-use super::{VcrTree, VcrForest, VcrTreeModule, VcrTreeSignal, MutexVcrTree};
+use super::{VcdTree, VcdForest, VcdTreeModule, VcdTreeSignal, MutexVcdTree};
 
-pub struct VcrWriter {
+pub struct VcdWriter {
     f: BufWriter<File>,
     wire_id: Vec<u8>,
-    forest: VcrForest,
+    forest: VcdForest,
     counter: u64,
     period: f64,
 }
 
-impl VcrWriter {
-    pub fn new(path: &str, freq: f64) -> VcrWriter {
+impl VcdWriter {
+    pub fn new(path: &str, freq: f64) -> VcdWriter {
         let f = File::create(path).expect("Couldn't create file");
-        VcrWriter { 
+        VcdWriter { 
             f: BufWriter::new(f),
             wire_id: vec![33],
-            forest: VcrForest::new(),
+            forest: VcdForest::new(),
             counter: 1,
             period: 5e8 / freq
         }
     }
 
-    pub fn add(&mut self, name: &str, vcr: VcrTree) -> MutexVcrTree {
-        self.forest.add(name, vcr)
+    pub fn add(&mut self, name: &str, vcd: VcdTree) -> MutexVcdTree {
+        self.forest.add(name, vcd)
     }
 
     fn next_id(wire_id: &mut Vec<u8>) -> String {
@@ -50,16 +50,16 @@ impl VcrWriter {
         result
     }
 
-    fn write_scope(f: &mut BufWriter<File>, wire_id: &mut Vec<u8>, tree: &mut VcrTree, name: &str) {
+    fn write_scope(f: &mut BufWriter<File>, wire_id: &mut Vec<u8>, tree: &mut VcdTree, name: &str) {
         match tree {
-            VcrTree::Module(VcrTreeModule(hash_map)) => {
+            VcdTree::Module(VcdTreeModule(hash_map)) => {
                 write!(f, "$scope module {} $end\n", name).expect("Couldn't write scope");
                 for (k, v) in hash_map {
                     Self::write_scope(f, wire_id, v, k);
                 }
                 write!(f, "$upscope $end\n").expect("Couldn't write scope");
             },
-            VcrTree::Signal(VcrTreeSignal { size,
+            VcdTree::Signal(VcdTreeSignal { size,
                                             id,
                                             ..}) => {
                 let new_id = Self::next_id(wire_id);
@@ -73,11 +73,11 @@ impl VcrWriter {
                 
                 *id = Some(new_id);
             },
-            VcrTree::Disabled => {}
+            VcdTree::Disabled => {}
         }
     }
 
-    fn write_scope_forest(f: &mut BufWriter<File>, wire_id: &mut Vec<u8>, tree: &mut VcrForest) {
+    fn write_scope_forest(f: &mut BufWriter<File>, wire_id: &mut Vec<u8>, tree: &mut VcdForest) {
         write!(f, "$scope module TOP $end\n").expect("Couldn't write scope");
         for (k, v) in &mut tree.0 {
             Self::write_scope(f,
@@ -105,14 +105,14 @@ impl VcrWriter {
         s
     }
 
-    fn write_data(f: &mut BufWriter<File>, tree: &VcrTree, dumpvars: bool) {
+    fn write_data(f: &mut BufWriter<File>, tree: &VcdTree, dumpvars: bool) {
         match tree {
-            VcrTree::Module(VcrTreeModule(hash_map)) => {
+            VcdTree::Module(VcdTreeModule(hash_map)) => {
                 for (_k, v) in hash_map {
                     Self::write_data(f, v, dumpvars);
                 }
             },
-            VcrTree::Signal(VcrTreeSignal { id: Some(id),
+            VcdTree::Signal(VcdTreeSignal { id: Some(id),
                                             size,
                                             old_state,
                                             new_state,
@@ -129,11 +129,11 @@ impl VcrWriter {
                 }
                 
             },
-            _ => panic!("Invalid VcrTree!")
+            _ => panic!("Invalid VcdTree!")
         }
     }
 
-    fn write_data_forest(f: &mut BufWriter<File>, tree: &VcrForest, dumpvars: bool) {
+    fn write_data_forest(f: &mut BufWriter<File>, tree: &VcdForest, dumpvars: bool) {
         for (_k, v) in &tree.0 {
             Self::write_data(f,
                              &v.lock().expect("Couldn't lock mutex"),

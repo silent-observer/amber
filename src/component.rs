@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::vcr::{VcrFiller, VcrTree, VcrConfig, MutexVcrTree};
+use crate::vcd::{VcdFiller, VcdTree, VcdConfig, MutexVcdTree};
 use crate::pins::{PinId, PinState};
 use crate::board::{ComponentId, Message, Board};
 use kanal;
 
-pub trait Component: Send + VcrFiller {
+pub trait Component: Send + VcdFiller {
     fn pin_count() -> usize;
     fn get_name(&self) -> &str;
     fn advance(&mut self);
@@ -16,7 +16,7 @@ pub trait Component: Send + VcrFiller {
                     id: ComponentId,
                     output_tx: kanal::Sender<Message>,
                     input_rx: kanal::Receiver<Message>,
-                    vcr: MutexVcrTree) {
+                    vcd: MutexVcdTree) {
         let mut output_changes = HashMap::new();
         for m in input_rx {
             println!("Component {:?} got a message: {:?}", id, m);
@@ -28,7 +28,7 @@ pub trait Component: Send + VcrFiller {
                     output_changes.clear();
                     self.advance();
                     self.fill_output_changes(&mut output_changes);
-                    self.fill_vcr(&mut vcr.lock().expect("Coundn't take mutex"));
+                    self.fill_vcd(&mut vcd.lock().expect("Coundn't take mutex"));
                     for (&pin, &state) in output_changes.iter() {
                         output_tx.send(Message::PinChange(id, pin, state))
                                  .expect("Cannot send update");
@@ -42,14 +42,14 @@ pub trait Component: Send + VcrFiller {
 }
 
 impl Board {
-    pub fn add_component<T>(&mut self, component: T, name: &str, config: &VcrConfig) -> ComponentId
+    pub fn add_component<T>(&mut self, component: T, name: &str, config: &VcdConfig) -> ComponentId
     where
         T: Component + 'static
     {
-        let vcr_init: VcrTree = component.init_vcr(config);
-        self.add_component_fn(move |id, output_tx, input_rx, vcr| {
+        let vcd_init: VcdTree = component.init_vcd(config);
+        self.add_component_fn(move |id, output_tx, input_rx, vcd| {
             let mut c = component;
-            c.execute_loop(id, output_tx, input_rx, vcr);
-        }, vcr_init, name, T::pin_count() as u16)
+            c.execute_loop(id, output_tx, input_rx, vcd);
+        }, vcd_init, name, T::pin_count() as u16)
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{pins::{PinState, PinId, PinStateConvertible}, component::Component, vcr::{fillers::VcrFiller, VcrTreeSignal}};
+use crate::{pins::{PinState, PinId, PinStateConvertible}, component::Component, vcd::{fillers::VcdFiller, VcdTreeSignal}};
 
 pub struct Led {
     state: PinState,
@@ -36,11 +36,11 @@ impl Component for Led {
     }
 }
 
-impl VcrFiller for Led {
+impl VcdFiller for Led {
     const IS_SIGNAL: bool = true;
 
-    fn init_vcr_signal(&self) -> VcrTreeSignal {
-        VcrTreeSignal::new(1, PinState::Z)
+    fn init_vcd_signal(&self) -> VcdTreeSignal {
+        VcdTreeSignal::new(1, PinState::Z)
     }
 
     fn get_signal_state(&self) -> Vec<PinState> {

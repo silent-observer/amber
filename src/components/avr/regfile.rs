@@ -1,4 +1,4 @@
-use crate::vcr::{VcrFiller, VcrModuleBuilder, VcrTreeModule};
+use crate::vcd::{VcdFiller, VcdModuleBuilder, VcdTreeModule};
 use crate::pins::{PinState, PinStateConvertible};
 
 pub struct RegisterFile {
@@ -22,17 +22,17 @@ impl RegisterFile {
     }
 }
 
-impl VcrFiller for RegisterFile {
+impl VcdFiller for RegisterFile {
     const IS_SIGNAL: bool = false;
 
-    fn init_vcr_module(&self, builder: &mut VcrModuleBuilder) {
+    fn init_vcd_module(&self, builder: &mut VcdModuleBuilder) {
         for i in 0..32 {
             let s = format!("r{}", i);
             builder.add_signal(&s, 8, PinState::Low);
         }
     }
 
-    fn fill_module(&self, module: &mut VcrTreeModule) {
+    fn fill_module(&self, module: &mut VcdTreeModule) {
         for i in 0..32 {
             let s = format!("r{}", i);
             module.update_subsignal(&s, self.regs[i].to_pin_vec());
@@ -41,8 +41,8 @@ impl VcrFiller for RegisterFile {
 }
 
 
-// impl VcrFillerNode for RegisterFile {
-//     fn fill_vcr(&self, hash_map: &mut std::collections::HashMap<String, VcrTree>) {
+// impl VcdFillerNode for RegisterFile {
+//     fn fill_vcd(&self, hash_map: &mut std::collections::HashMap<String, VcdTree>) {
 //         for i in 0..32 {
 //             let s = format!("r{}", i);
 //             hash_map
@@ -52,10 +52,10 @@ impl VcrFiller for RegisterFile {
 //         }
 //     }
 
-//     fn init_vcr(&self, hash_map: &mut std::collections::HashMap<String, VcrTree>) {
+//     fn init_vcd(&self, hash_map: &mut std::collections::HashMap<String, VcdTree>) {
 //         for i in 0..32 {
 //             let s = format!("r{}", i);
-//             hash_map.insert(s, VcrTree::new_leaf(8, PinState::Low));
+//             hash_map.insert(s, VcdTree::new_leaf(8, PinState::Low));
 //         }
 //     }
 // }

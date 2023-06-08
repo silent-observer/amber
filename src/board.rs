@@ -2,7 +2,7 @@ use std::thread::{JoinHandle, spawn};
 use kanal;
 
 use crate::pins::{PinId, PinState};
-use crate::vcr::{VcrTree, VcrWriter, MutexVcrTree};
+use crate::vcd::{VcdTree, VcdWriter, MutexVcdTree};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -123,11 +123,11 @@ pub struct Board {
     pins: Vec<Pin>,
     wires: Vec<WireState>,
 
-    vcr_writer: VcrWriter,
+    vcd_writer: VcdWriter,
 }
 
 impl Board {
-    pub fn new(vcr_path: &str, freq: f64) -> Board {
+    pub fn new(vcd_path: &str, freq: f64) -> Board {
         let (output_tx, output_rx) = kanal::unbounded();
         let clock_pin = Pin {
             id: 0,
@@ -144,17 +144,17 @@ impl Board {
             pins: vec![clock_pin],
             wires: Vec::new(),
             
-            vcr_writer: VcrWriter::new(vcr_path, freq),
+            vcd_writer: VcdWriter::new(vcd_path, freq),
         }
     }
 
     pub fn add_component_fn<F>(&mut self,
                             f: F,
-                            vcr: VcrTree,
+                            vcd: VcdTree,
                             name: &str,
                             pins_count: u16) -> ComponentId
     where
-        F: FnOnce(ComponentId, kanal::Sender<Message>, kanal::Receiver<Message>, MutexVcrTree) + Send + 'static
+        F: FnOnce(ComponentId, kanal::Sender<Message>, kanal::Receiver<Message>, MutexVcdTree) + Send + 'static
     {
         let (input_tx, input_rx) = kanal::unbounded();
         let output_tx_copy = self.output_tx
@@ -162,9 +162,9 @@ impl Board {
             .expect("Cannot create a component without output transmitter")
             .clone();
         let component_id = ComponentId(self.components.len());
-        let vcr_mutex = self.vcr_writer.add(name, vcr);
+        let vcd_mutex = self.vcd_writer.add(name, vcd);
 
-        let thread = spawn(move || f(component_id, output_tx_copy, input_rx, vcr_mutex));
+        let thread = spawn(move || f(component_id, output_tx_copy, input_rx, vcd_mutex));
         let c = ComponentHandle {
             id: component_id,
             thread: Some(thread),
@@ -314,10 +314,10 @@ impl Board {
     }
 
     pub fn simulate(&mut self, clocks: u64) {
-        self.vcr_writer.write_header();
+        self.vcd_writer.write_header();
         for _ in 0..clocks {
             self.toggle_clock();
-            self.vcr_writer.write_step();
+            self.vcd_writer.write_step();
         }
     }
 }

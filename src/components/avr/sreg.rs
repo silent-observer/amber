@@ -1,6 +1,6 @@
 use bitfield::{bitfield, Bit};
 
-use crate::vcr::{VcrFiller, VcrModuleBuilder, VcrTreeModule};
+use crate::vcd::{VcdFiller, VcdModuleBuilder, VcdTreeModule};
 use crate::pins::{PinState, PinStateConvertible};
 
 bitfield!{
@@ -19,16 +19,16 @@ bitfield!{
 
 const BIT_NAMES: [&str; 8] = ["I", "T", "H", "S", "V", "N", "Z", "C"];
 
-impl VcrFiller for StatusRegister {
+impl VcdFiller for StatusRegister {
     const IS_SIGNAL: bool = false;
 
-    fn init_vcr_module(&self, builder: &mut VcrModuleBuilder) {
+    fn init_vcd_module(&self, builder: &mut VcdModuleBuilder) {
         for i in 0..8 {
             builder.add_signal(BIT_NAMES[i], 1, PinState::Low);
         }
     }
 
-    fn fill_module(&self, module: &mut VcrTreeModule) {
+    fn fill_module(&self, module: &mut VcdTreeModule) {
         for i in 0..8 {
             module.update_subsignal(BIT_NAMES[i], self.bit(i).to_pin_vec());
         }

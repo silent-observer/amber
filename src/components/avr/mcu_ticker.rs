@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::vcr::{VcrFiller, VcrConfig, VcrTree};
+use crate::vcd::{VcdFiller, VcdConfig, VcdTree};
 use crate::pins::{PinId, PinState};
 use crate::component::Component;
 
@@ -68,15 +68,15 @@ where
     }
 }
 
-impl<M> VcrFiller for McuTicker<M, IoController<M>>
+impl<M> VcdFiller for McuTicker<M, IoController<M>>
 where
     M: McuModel + 'static
 {
     const IS_SIGNAL: bool = false;
-    fn init_vcr(&self, config: &VcrConfig) -> VcrTree {
-        self.mcu.init_vcr(config)
+    fn init_vcd(&self, config: &VcdConfig) -> VcdTree {
+        self.mcu.init_vcd(config)
     }
-    fn fill_vcr(&self, tree: &mut VcrTree) {
-        self.mcu.fill_vcr(tree)
+    fn fill_vcd(&self, tree: &mut VcdTree) {
+        self.mcu.fill_vcd(tree)
     }
 }
