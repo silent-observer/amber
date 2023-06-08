@@ -1,4 +1,8 @@
-use bitfield::bitfield;
+use std::collections::HashMap;
+
+use bitfield::{bitfield, Bit};
+
+use crate::{pins::{PinState, PinStateConvertible}, vcr::{fillers::VcrFiller, builder::VcrModuleBuilder, VcrTreeModule}};
 
 bitfield!{
     #[derive(Clone, Copy)]
@@ -14,14 +18,32 @@ bitfield!{
     pub i, set_i: 7;
 }
 
+const BIT_NAMES: [&str; 8] = ["I", "T", "H", "S", "V", "N", "Z", "C"];
+
+impl VcrFiller for StatusRegister {
+    const IS_SIGNAL: bool = false;
+
+    fn init_vcr_module(&self, builder: &mut VcrModuleBuilder) {
+        for i in 0..8 {
+            builder.add_signal(BIT_NAMES[i], 1, PinState::Low);
+        }
+    }
+
+    fn fill_module(&self, module: &mut VcrTreeModule) {
+        for i in 0..8 {
+            module.update_subsignal(BIT_NAMES[i], self.bit(i).to_pin_vec());
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test_helper {
     use bitfield::Bit;
 
-    use super::StatusRegister;
+    use super::*;
 
     pub fn assert_sreg(sreg: &StatusRegister, sreg_initial: &StatusRegister, mask: &'static str) {
-        const BIT_NAMES: [&str; 8] = ["I", "T", "H", "S", "V", "N", "Z", "C"];
+        
 
         assert!(mask.len() == 8);
         for (i, c) in mask.chars().enumerate() {

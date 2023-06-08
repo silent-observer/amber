@@ -1,14 +1,14 @@
-use std::thread::{JoinHandle, spawn};
+use std::{thread::{JoinHandle, spawn}, sync::{Mutex, Arc}};
 use kanal;
 
-use crate::pins::{PinId, PinState};
+use crate::{pins::{PinId, PinState}, vcr::{VcrTree, writer::VcrWriter, MutexVcrTree}};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Step,
     Done(ComponentId),
     Die,
-    PinChange(ComponentId, PinId, PinState)
+    PinChange(ComponentId, PinId, PinState),
 }
 
 struct ComponentHandle {
@@ -116,14 +116,17 @@ pub struct Board {
     output_rx: Option<kanal::Receiver<Message>>,
     output_tx: Option<kanal::Sender<Message>>,
 
+    component_names: Vec<String>,
     components: Vec<ComponentHandle>,
     pin_table: Vec<Vec<PinIndex>>,
     pins: Vec<Pin>,
     wires: Vec<WireState>,
+
+    vcr_writer: VcrWriter,
 }
 
 impl Board {
-    pub fn new() -> Board {
+    pub fn new(vcr_path: &str, freq: f64) -> Board {
         let (output_tx, output_rx) = kanal::unbounded();
         let clock_pin = Pin {
             id: 0,
@@ -134,18 +137,23 @@ impl Board {
         Board {
             output_rx: Some(output_rx),
             output_tx: Some(output_tx),
+            component_names: Vec::new(),
             components: Vec::new(),
             pin_table: Vec::new(),
             pins: vec![clock_pin],
-            wires: Vec::new()
+            wires: Vec::new(),
+            
+            vcr_writer: VcrWriter::new(vcr_path, freq),
         }
     }
 
     pub fn add_component_fn<F>(&mut self,
                             f: F,
+                            vcr: VcrTree,
+                            name: &str,
                             pins_count: u16) -> ComponentId
     where
-        F: FnOnce(ComponentId, kanal::Sender<Message>, kanal::Receiver<Message>) + Send + 'static
+        F: FnOnce(ComponentId, kanal::Sender<Message>, kanal::Receiver<Message>, MutexVcrTree) + Send + 'static
     {
         let (input_tx, input_rx) = kanal::unbounded();
         let output_tx_copy = self.output_tx
@@ -153,12 +161,15 @@ impl Board {
             .expect("Cannot create a component without output transmitter")
             .clone();
         let component_id = ComponentId(self.components.len());
-        let thread = spawn(move || f(component_id, output_tx_copy, input_rx));
+        let vcr_mutex = self.vcr_writer.add(name, vcr);
+
+        let thread = spawn(move || f(component_id, output_tx_copy, input_rx, vcr_mutex));
         let c = ComponentHandle {
             id: component_id,
             thread: Some(thread),
             input_tx
         };
+
         
 
         let mut pin_vec = Vec::with_capacity(pins_count as usize);
@@ -174,6 +185,8 @@ impl Board {
         }
         self.pin_table.push(pin_vec);
         self.components.push(c);
+        self.component_names.push(name.to_string());
+        
         component_id
     }
 
@@ -262,18 +275,8 @@ impl Board {
         }
     }
 
-    pub fn toggle_clock(&mut self) {
-        const CLOCK_PIN: PinIndex = 0;
-        if self.pins[CLOCK_PIN].out_state == PinState::High {
-            self.set_pin(CLOCK_PIN, PinState::Low);
-        } else {
-            self.set_pin(CLOCK_PIN, PinState::High);
-        }
-        for c in &self.components {
-            c.notify_step();
-        }
+    pub fn handle_messages(&mut self) {
         let mut done_counter = self.components.len();
-        
         let mut output_rx = self.output_rx.take().expect("Has to have output reciever");
         'outer_loop:
         loop {
@@ -281,7 +284,7 @@ impl Board {
                 println!("Got message: {:?}", m);
                 match m {
                     Message::Step | Message::Die => {}
-                    Message::Done(_comp) => {
+                    Message::Done(_component_id) => {
                         done_counter -= 1;
                         if done_counter == 0 {break 'outer_loop;}
                     }
@@ -293,5 +296,27 @@ impl Board {
             }
         }
         self.output_rx = Some(output_rx);
+    }
+
+    pub fn toggle_clock(&mut self) {
+        const CLOCK_PIN: PinIndex = 0;
+        if self.pins[CLOCK_PIN].out_state == PinState::High {
+            self.set_pin(CLOCK_PIN, PinState::Low);
+        } else {
+            self.set_pin(CLOCK_PIN, PinState::High);
+        }
+        for c in &self.components {
+            c.notify_step();
+        }
+        
+        self.handle_messages();
+    }
+
+    pub fn simulate(&mut self, clocks: u64) {
+        self.vcr_writer.write_header();
+        for _ in 0..clocks {
+            self.toggle_clock();
+            self.vcr_writer.write_step();
+        }
     }
 }

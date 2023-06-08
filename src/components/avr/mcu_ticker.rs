@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{component::Component, pins::{PinId, PinState}};
+use crate::{component::Component, pins::{PinId, PinState}, vcr::{fillers::VcrFiller, config::VcrConfig, VcrTree}};
 
 use super::{mcu::Mcu, mcu_model::McuModel, io_controller::{IoControllerTrait, IoController}};
 
@@ -59,5 +59,22 @@ where
 
     fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>) {
         self.mcu.io.fill_output_changes(changes)
+    }
+
+    fn get_name(&self) -> &str {
+        "avr"
+    }
+}
+
+impl<M> VcrFiller for McuTicker<M, IoController<M>>
+where
+    M: McuModel + 'static
+{
+    const IS_SIGNAL: bool = false;
+    fn init_vcr(&self, config: &VcrConfig) -> VcrTree {
+        self.mcu.init_vcr(config)
+    }
+    fn fill_vcr(&self, tree: &mut VcrTree) {
+        self.mcu.fill_vcr(tree)
     }
 }

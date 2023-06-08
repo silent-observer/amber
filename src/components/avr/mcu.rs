@@ -6,9 +6,11 @@ mod branches;
 mod bitops;
 mod memory_controller;
 
-use std::{marker::PhantomData};
+use std::{marker::PhantomData, collections::HashMap};
 
 use bitfield::Bit;
+
+use crate::{vcr::{fillers::VcrFiller, config::VcrConfig, VcrTreeModule, builder::VcrModuleBuilder}, pins::{PinState, PinStateConvertible}};
 
 use super::{regfile::RegisterFile, mcu_model::McuModel, io_controller::{IoController, IoControllerTrait}, sreg::StatusRegister, bit_helpers::bit_field_combined};
 
@@ -221,6 +223,64 @@ where
         }
     }
 }
+
+impl<M, Io> VcrFiller for Mcu<M, Io> 
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
+    const IS_SIGNAL: bool = false;
+
+    fn init_vcr_module(&self, builder: &mut VcrModuleBuilder) {
+        builder.add_signal("clk", 1, PinState::Low);
+        builder.add_signal("pc", 32, PinState::Low);
+        builder.add_node("regs", &self.reg_file);
+        builder.add_node("sreg", &self.sreg);
+    }
+
+    fn fill_module(&self, module: &mut VcrTreeModule) {
+        module.update_subsignal("clk", self.io.clock_pin().to_pin_vec());
+        module.update_subsignal("pc", self.pc.to_pin_vec());
+        module.update_child("regs", &self.reg_file);
+        module.update_child("sreg", &self.sreg);
+    }
+}
+
+// impl<M, Io> VcrFillerNode for Mcu<M, Io> 
+// where
+//     M: McuModel + 'static,
+//     Io: IoControllerTrait,
+// {
+//     fn fill_vcr(&self, hash_map: &mut HashMap<String, VcrTree>) {
+//         hash_map
+//             .get_mut("clk")
+//             .expect("No clk key")
+//             .update_leaf(self.io.clock_pin());
+//         hash_map
+//             .get_mut("pc")
+//             .expect("No pc key")
+//             .update_leaf(self.pc);
+//         hash_map
+//             .get_mut("regs")
+//             .expect("No regs key")
+//             .update_node(&self.reg_file);
+//         hash_map
+//             .get_mut("sreg")
+//             .expect("No sreg key")
+//             .update_node(&self.sreg);
+//     }
+
+//     fn init_vcr(&self, config: &VcrConfig, node: &mut VcrTreeNode) {
+//         node.add("clk".to_string(),
+//                  config.get("clk").make_leaf(1, PinState::Low));
+//         node.add("pc".to_string(),
+//                  config.get("pc").make_leaf(32, PinState::Low));
+//         let regs = config.get("regs").make_node(&self.reg_file);
+//         let sreg = config.get("sreg").make_node(&self.sreg);
+//         node.add("regs".to_string(), regs);
+//         node.add("sreg".to_string(), sreg);
+//     }
+// }
 
 #[cfg(test)]
 mod test_helper {

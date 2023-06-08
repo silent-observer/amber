@@ -17,6 +17,7 @@ pub trait IoControllerTrait {
     fn write_external_u8(&mut self, addr: u16, val: u8);
 
     fn is_clock_rising(&self) -> bool;
+    fn clock_pin(&self) -> PinState;
 
     fn pin_count() -> usize;
     fn set_pin(&mut self, pin: PinId, state: PinState);
@@ -82,9 +83,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
     fn set_pin(&mut self, pin: PinId, state: PinState) {
         if pin == CLOCK_PIN {
-            if self.clock_pin == PinState::Low && state == PinState::High {
-                self.is_clock_rising = true;
-            }
+            self.is_clock_rising = self.clock_pin == PinState::Low && state == PinState::High;
             self.clock_pin = state;
         }
         else if pin < 1 + 2 * 8 {
@@ -100,6 +99,9 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
     fn is_clock_rising(&self) -> bool {
         self.is_clock_rising
+    }
+    fn clock_pin(&self) -> PinState {
+        self.clock_pin
     }
 
     fn fill_output_changes(&mut self, changes: &mut HashMap<PinId,PinState>) {
