@@ -7,7 +7,10 @@ use std::{collections::HashMap, sync::{Mutex, Arc}};
 
 use crate::pins::{PinState, PinStateConvertible};
 
-use self::fillers::VcrFiller;
+pub use fillers::VcrFiller;
+pub use config::VcrConfig;
+pub use builder::VcrModuleBuilder;
+pub use writer::VcrWriter;
 
 
 #[derive(Debug, Clone)]

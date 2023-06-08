@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-
 use bitfield::{bitfield, Bit};
 
-use crate::{pins::{PinState, PinStateConvertible}, vcr::{fillers::VcrFiller, builder::VcrModuleBuilder, VcrTreeModule}};
+use crate::vcr::{VcrFiller, VcrModuleBuilder, VcrTreeModule};
+use crate::pins::{PinState, PinStateConvertible};
 
 bitfield!{
     #[derive(Clone, Copy)]

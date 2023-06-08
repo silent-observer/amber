@@ -5,7 +5,7 @@ use super::{config::VcrConfig, VcrTree, VcrTreeModule, VcrTreeSignal, builder::V
 pub trait VcrFiller {
     const IS_SIGNAL: bool;
 
-    fn init_vcr_module(&self, builder: &mut VcrModuleBuilder) {
+    fn init_vcr_module(&self, _builder: &mut VcrModuleBuilder) {
         panic!("Cannot init this as a module")
     }
     fn init_vcr_signal(&self) -> VcrTreeSignal {

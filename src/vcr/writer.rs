@@ -1,5 +1,4 @@
 use std::io::Write;
-use std::sync::{Arc, Mutex};
 use std::{io::BufWriter, fs::File};
 
 use crate::pins::PinState;

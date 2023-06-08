@@ -1,9 +1,7 @@
 use bitfield::Bit;
 
-use crate::components::avr::{
-    mcu_model::McuModel, 
-    bit_helpers::{get_rd_fields, get_k8, get_d_field}, io_controller::IoControllerTrait
-};
+use crate::components::avr::{mcu_model::McuModel, io_controller::IoControllerTrait};
+use crate::components::avr::bit_helpers::{get_rd_fields, get_k8, get_d_field};
 
 use super::{Mcu};
 

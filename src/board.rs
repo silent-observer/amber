@@ -1,7 +1,8 @@
-use std::{thread::{JoinHandle, spawn}, sync::{Mutex, Arc}};
+use std::thread::{JoinHandle, spawn};
 use kanal;
 
-use crate::{pins::{PinId, PinState}, vcr::{VcrTree, writer::VcrWriter, MutexVcrTree}};
+use crate::pins::{PinId, PinState};
+use crate::vcr::{VcrTree, VcrWriter, MutexVcrTree};
 
 #[derive(Debug, Clone)]
 pub enum Message {

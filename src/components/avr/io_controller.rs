@@ -1,6 +1,7 @@
 mod gpio;
 
-use std::{marker::PhantomData, collections::HashMap};
+use std::collections::HashMap;
+use std::marker::PhantomData;
 use mockall::*;
 
 use crate::pins::{PinId, PinState};

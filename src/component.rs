@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{board::{ComponentId, Message, Board}, pins::{PinId, PinState}, vcr::{fillers::VcrFiller, VcrTree, config::VcrConfig, MutexVcrTree}};
+use crate::vcr::{VcrFiller, VcrTree, VcrConfig, MutexVcrTree};
+use crate::pins::{PinId, PinState};
+use crate::board::{ComponentId, Message, Board};
 use kanal;
 
 pub trait Component: Send + VcrFiller {

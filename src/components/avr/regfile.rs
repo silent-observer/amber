@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
-use crate::{pins::{PinState, PinStateConvertible}, vcr::{fillers::VcrFiller, builder::VcrModuleBuilder, VcrTreeModule}};
+use crate::vcr::{VcrFiller, VcrModuleBuilder, VcrTreeModule};
+use crate::pins::{PinState, PinStateConvertible};
 
 pub struct RegisterFile {
     pub regs: [u8; 32],

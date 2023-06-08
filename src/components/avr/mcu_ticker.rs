@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{component::Component, pins::{PinId, PinState}, vcr::{fillers::VcrFiller, config::VcrConfig, VcrTree}};
+use crate::vcr::{VcrFiller, VcrConfig, VcrTree};
+use crate::pins::{PinId, PinState};
+use crate::component::Component;
 
 use super::{mcu::Mcu, mcu_model::McuModel, io_controller::{IoControllerTrait, IoController}};
 
