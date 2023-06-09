@@ -6,6 +6,9 @@ use crate::component::Component;
 
 use super::{mcu::Mcu, mcu_model::McuModel, io_controller::{IoControllerTrait, IoController}};
 
+/// Top level AVR MCU component.
+/// 
+/// Accounts for correct timings.
 pub struct McuTicker<M, Io>
 where
     M: McuModel + 'static,
@@ -15,10 +18,14 @@ where
     ticks: u8,
 }
 
+/// AVR MCU with a default IoController.
+pub type McuDefault<M> = McuTicker<M, IoController<M>>;
+
 impl<M> McuTicker<M, IoController<M>>
 where
     M: McuModel + 'static,
 {
+    /// Creates a new AVR MCU.
     pub fn new() -> McuTicker<M, IoController<M>> {
         let io = IoController::new();
         McuTicker {
@@ -26,7 +33,14 @@ where
             ticks: 1
         }
     }
+}
 
+impl<M, Io> McuTicker<M, Io> 
+where
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
+{
+    // Advances MCU a single clock forward.
     pub fn tick(&mut self) {
         if self.ticks == 0 {
             self.ticks = self.mcu.step();
@@ -36,14 +50,17 @@ where
         self.ticks -= 1;
     }
 
+    /// Loads MCU flash memory from a slice.
     pub fn load_flash(&mut self, data: &[u16]) {
         self.mcu.load_flash(data);
     }
 }
 
-impl<M> Component for McuTicker<M, IoController<M>> 
+/// Custom [Component] implementation, forwarding everything to `IoController`.
+impl<M, Io> Component for McuTicker<M, Io> 
 where
-    M: McuModel + 'static
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
 {
     fn pin_count() -> usize {
         IoController::<M>::pin_count()
@@ -62,15 +79,13 @@ where
     fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>) {
         self.mcu.io.fill_output_changes(changes)
     }
-
-    fn get_name(&self) -> &str {
-        "avr"
-    }
 }
 
-impl<M> VcdFiller for McuTicker<M, IoController<M>>
+/// Custom [VcdFiller] implementation, forwarding everything to `Mcu`.
+impl<M, Io> VcdFiller for McuTicker<M, Io>
 where
-    M: McuModel + 'static
+    M: McuModel + 'static,
+    Io: IoControllerTrait,
 {
     const IS_SIGNAL: bool = false;
     fn init_vcd(&self, config: &VcdConfig) -> VcdTree {

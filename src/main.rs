@@ -1,8 +1,8 @@
-use amber::{board::Board, components::{avr::{mcu_ticker::McuTicker, mcu_model::Atmega2560}, led::Led}, vcd::config::{VcdConfig}, vcd_config};
+use amber::{board::Board, components::{avr::Atmega2560, led::Led}, vcd::config::{VcdConfig}, vcd_config};
 
 fn main() {
     let mut board = Board::new("out.vcd", 16e6);
-    let mut mcu = McuTicker::<Atmega2560, _>::new();
+    let mut mcu = Atmega2560::new();
     mcu.load_flash(&[
         0x9A27, //0x0000: sbi DDRB, 7
         0x9A2F, //0x0001: sbi PORTB, 7
@@ -14,7 +14,7 @@ fn main() {
     let mcu = board.add_component(
         mcu, "mcu", 
         &vcd_config!{
-            clk,
+            clk
             pc
         });
     board.add_clock_wire(&[(mcu, 0)]);

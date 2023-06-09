@@ -53,6 +53,8 @@ impl PinState {
 }
 
 /// Type for pin numbers of components.
+/// 
+/// This is unique only for every component.
 pub type PinId = u16;
 
 /// Can be converted to a vector of [PinState].

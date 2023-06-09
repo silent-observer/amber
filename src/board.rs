@@ -4,27 +4,65 @@ use kanal;
 use crate::pins::{PinId, PinState};
 use crate::vcd::{VcdTree, VcdWriter, MutexVcdTree};
 
+/// Messages used to communicate with components, working in other threads.
+/// 
+/// The main communication protocol is the following:
+/// ```none
+/// loop {
+///     Board -> PinChange(component, pin_1, pin_state_1) -> Component
+///     Board -> PinChange(component, pin_2, pin_state_2) -> Component
+///     ...
+///     Board -> PinChange(component, pin_n, pin_state_n) -> Component
+///     Board -> Step -> Component
+///     [Component advances a step using all the new pin states]
+///     Component -> Done(component)
+/// }
+/// Board -> Die -> Component
+/// [Component thread stops]
+/// ```
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// Board to Component: advance a single step accounting for all the changes.
     Step,
+    /// Component to Board: sent after Step is done.
     Done(ComponentId),
+    /// Board to Component: stop component thread.
     Die,
+    /// Board to Component: notify component about a pin changing state.
     PinChange(ComponentId, PinId, PinState),
 }
 
+/// Index of a pin. Unlike [PinId], this is unique for the whole board, not only for one component.
+type PinIndex = usize;
+
+/// A unique identifier for a wire.
+#[derive(Debug, Clone, Copy)]
+pub struct WireId(usize);
+/// A unique identifier for a component.
+#[derive(Debug, Clone, Copy)]
+pub struct ComponentId(usize);
+
+/// Internal component handle.
 struct ComponentHandle {
+    /// Unique id of the component.
     id: ComponentId,
+    /// Handle for the component thread.
     thread: Option<JoinHandle<()>>,
+    /// Channel for transmitting messages into the component.
     input_tx: kanal::Sender<Message>,
+    /// Vector of all the unque pin indices.
+    pins: Vec<PinIndex>
 }
 
 impl ComponentHandle {
+    /// Send [Message::PinChange].
     fn notify_on_pin_change(&self, pin: PinId, state: PinState) {
         self.input_tx
             .send(Message::PinChange(self.id, pin, state))
             .expect("Error sending update");
     }
 
+    /// Send [Message::Step].
     fn notify_step(&self) {
         self.input_tx
             .send(Message::Step)
@@ -32,6 +70,7 @@ impl ComponentHandle {
     }
 }
 
+/// When a handle is dropped, the corresponding component thread is stopped automatically.
 impl Drop for ComponentHandle {
     fn drop(&mut self) {
         self.input_tx.send(Message::Die).expect("Error sending update");
@@ -39,13 +78,9 @@ impl Drop for ComponentHandle {
     }
 }
 
-type PinIndex = usize;
-
-#[derive(Debug, Clone, Copy)]
-pub struct WireId(usize);
-#[derive(Debug, Clone, Copy)]
-pub struct ComponentId(usize);
-
+/// A representation for a state of a single wire.
+/// 
+/// Counts how many input signals of each type it has.
 struct WireStateCounter {
     low: u8,
     high: u8,
@@ -54,6 +89,7 @@ struct WireStateCounter {
 }
 
 impl WireStateCounter {
+    /// Adds a new input signal into the [WireStateCounter].
     fn add(&mut self, pin: PinState) {
         match pin {
             PinState::Low => self.low += 1,
@@ -68,6 +104,7 @@ impl WireStateCounter {
         }
     }
 
+    /// Removes an input signal into the [WireStateCounter].
     fn remove(&mut self, pin: PinState) {
         match pin {
             PinState::Low => self.low -= 1,
@@ -82,6 +119,7 @@ impl WireStateCounter {
         }
     }
 
+    /// Reads the current state of the wire.
     fn read(&self) -> PinState {
         match self {
             WireStateCounter {low: 0, high: 0, weak_low: 0, weak_high: 0} => PinState::Z,
@@ -95,38 +133,59 @@ impl WireStateCounter {
     }
 }
 
-struct WireState {
+/// A representation for a single wire connecting multiple pins.
+struct Wire {
     counter: WireStateCounter,
     pins: Vec<PinIndex>
 }
 
-impl WireState {
+impl Wire {
+    /// Reads current wire state.
     fn read(&self) -> PinState {
         self.counter.read()
     }
 }
 
+/// A representation for a single pin of a component.
 struct Pin {
+    /// [PinId] is unique only up to a component.
     id: PinId,
+    /// A component to which the pin belongs.
+    /// 
+    /// There can be pins without components.
     component: Option<ComponentId>,
+    /// A wire that is connected to the pin.
+    /// 
+    /// There can be pins without a connected wire.
     wire: Option<WireId>,
+    /// A state the pin is currently outputting.
+    /// 
+    /// If a pin is an input pin, it is still outputting [PinState::Z].
     out_state: PinState,
 }
 
+/// Top-level element of a simulation. A board containing multiple components.
 pub struct Board {
+    /// Channel for recieving messages from the component.
     output_rx: Option<kanal::Receiver<Message>>,
+    /// Transmitter corresponding to `output_rx`, to be cloned into every new component.
     output_tx: Option<kanal::Sender<Message>>,
-
-    component_names: Vec<String>,
+    /// Vector of all components. Indexed by [ComponentId]
     components: Vec<ComponentHandle>,
-    pin_table: Vec<Vec<PinIndex>>,
+    /// Vector of all pins. Indexed by [PinIndex]
     pins: Vec<Pin>,
-    wires: Vec<WireState>,
+    /// Vector of all wires. Indexed by [WireId]
+    wires: Vec<Wire>,
 
+    /// A VCD file writer.
     vcd_writer: VcdWriter,
 }
 
 impl Board {
+    /// Creates a new board.
+    /// 
+    /// `vcd_path` is an output path for .vcd file.
+    /// `freq` is the clock frequency in Hz.
     pub fn new(vcd_path: &str, freq: f64) -> Board {
         let (output_tx, output_rx) = kanal::unbounded();
         let clock_pin = Pin {
@@ -138,9 +197,7 @@ impl Board {
         Board {
             output_rx: Some(output_rx),
             output_tx: Some(output_tx),
-            component_names: Vec::new(),
             components: Vec::new(),
-            pin_table: Vec::new(),
             pins: vec![clock_pin],
             wires: Vec::new(),
             
@@ -148,6 +205,14 @@ impl Board {
         }
     }
 
+    /// Adds a new component to the board using a closure.
+    /// 
+    /// Using this you can add custom components without `Component` structure.
+    /// The component closure must accept component id, two channel sides for
+    /// transmitting and receiving messages, and also a VcdTree behind a mutex,
+    /// to be updated after every [Message::Step].
+    /// 
+    /// This also requires already initialized VcdTree.
     pub fn add_component_fn<F>(&mut self,
                             f: F,
                             vcd: VcdTree,
@@ -165,41 +230,47 @@ impl Board {
         let vcd_mutex = self.vcd_writer.add(name, vcd);
 
         let thread = spawn(move || f(component_id, output_tx_copy, input_rx, vcd_mutex));
-        let c = ComponentHandle {
-            id: component_id,
-            thread: Some(thread),
-            input_tx
-        };
-
-        
-
-        let mut pin_vec = Vec::with_capacity(pins_count as usize);
+        let mut pins = Vec::with_capacity(pins_count as usize);
         for id in 0..pins_count {
-            pin_vec.push(self.pins.len());
+            pins.push(self.pins.len());
             self.pins.push(Pin {
                 id,
                 component: Some(component_id),
                 wire: None,
                 out_state: PinState::Z,
             });
+        }
+
+        let c = ComponentHandle {
+            id: component_id,
+            thread: Some(thread),
+            pins,
+            input_tx
+        };
+
+        for id in 0..pins_count {
             c.notify_on_pin_change(id, PinState::Z);
         }
-        self.pin_table.push(pin_vec);
         self.components.push(c);
-        self.component_names.push(name.to_string());
         
         component_id
     }
 
+    /// Gets [PinIndex] from [ComponentId] and [PinId].
+    fn get_pin_index(&self, component_id: ComponentId, pin_id: PinId) -> PinIndex {
+        self.components[component_id.0].pins[pin_id as usize]
+    }
+
+    /// Adds a new wire to the board, connecting specified pins.
     pub fn add_wire(&mut self, pins: &[(ComponentId, PinId)]) -> WireId {
-        let mut wire = WireState {
+        let mut wire = Wire {
             counter: WireStateCounter { low: 0, high: 0, weak_low: 0, weak_high: 0 },
             pins: Vec::with_capacity(pins.len())
         };
 
         let wire_id = WireId(self.wires.len());
-        for &(ComponentId(component_id), pin_id) in pins {
-            let index = self.pin_table[component_id][pin_id as usize];
+        for &(component_id, pin_id) in pins {
+            let index = self.get_pin_index(component_id, pin_id);
             let pin = &mut self.pins[index];
             wire.pins.push(index);
             wire.counter.add(pin.out_state);
@@ -214,6 +285,9 @@ impl Board {
         wire_id
     }
 
+    /// Adds a new clock wire to the board, connecting specified pins.
+    /// 
+    /// It is automatically connected to the internal clock pin.
     pub fn add_clock_wire(&mut self, pins: &[(ComponentId, PinId)]) -> WireId {
         let wire_id = self.add_wire(pins);
         self.wires[wire_id.0].pins.push(0);
@@ -228,6 +302,7 @@ impl Board {
         wire_id
     }
 
+    /// Set a new pin state and propagate the updates through wires.
     fn set_pin(&mut self,
                pin_index: PinIndex,
                state: PinState) {
@@ -240,6 +315,7 @@ impl Board {
         }
     }
 
+    /// Set a new pin state.
     fn update_pin_output(&mut self,
                          index: PinIndex,
                          state: PinState) -> (PinState, Option<WireId>) {
@@ -249,6 +325,7 @@ impl Board {
         (old_state, pin.wire)
     }
 
+    /// Update wire internal counters.
     fn update_wire(&mut self,
                    WireId(wire_index): WireId,
                    old_state: PinState,
@@ -263,6 +340,7 @@ impl Board {
         (old_out_state, new_out_state)
     }
 
+    /// Notify all the components connected to the wire about the pin change.
     fn update_pins_inputs(&mut self,
                           WireId(wire_index): WireId,
                           old_out_state: PinState,
@@ -276,6 +354,7 @@ impl Board {
         }
     }
 
+    /// Handle [messages](Message) for a single step of simulation.
     pub fn handle_messages(&mut self) {
         let mut done_counter = self.components.len();
         let mut output_rx = self.output_rx.take().expect("Has to have output reciever");
@@ -289,8 +368,8 @@ impl Board {
                         done_counter -= 1;
                         if done_counter == 0 {break 'outer_loop;}
                     }
-                    Message::PinChange(ComponentId(component_id), pin_id, state) => {
-                        let index = self.pin_table[component_id][pin_id as usize];
+                    Message::PinChange(component_id, pin_id, state) => {
+                        let index = self.get_pin_index(component_id, pin_id);
                         self.set_pin(index, state);
                     }
                 }
@@ -299,6 +378,7 @@ impl Board {
         self.output_rx = Some(output_rx);
     }
 
+    /// Toggle a clock pin once.
     pub fn toggle_clock(&mut self) {
         const CLOCK_PIN: PinIndex = 0;
         if self.pins[CLOCK_PIN].out_state == PinState::High {
@@ -313,9 +393,12 @@ impl Board {
         self.handle_messages();
     }
 
-    pub fn simulate(&mut self, clocks: u64) {
+    /// Run the simulation for specified number of cycles.
+    pub fn simulate(&mut self, cycles: u64) {
         self.vcd_writer.write_header();
-        for _ in 0..clocks {
+        for _ in 0..cycles {
+            self.toggle_clock();
+            self.vcd_writer.write_step();
             self.toggle_clock();
             self.vcd_writer.write_step();
         }

@@ -2,6 +2,7 @@ use bitfield::Bit;
 
 use crate::pins::{PinState, PinId};
 
+/// GPIO port, together with IO registers.
 #[derive(Debug, Clone)]
 pub struct GpioPort {
     port_register: u8,

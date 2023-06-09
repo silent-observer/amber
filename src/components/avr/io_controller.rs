@@ -10,21 +10,32 @@ use self::gpio::GpioPort;
 
 use super::mcu_model::McuModel;
 
+/// An AVR IO controller (can be mocked)
 #[automock]
-pub trait IoControllerTrait {
+pub trait IoControllerTrait: Send {
+    /// Reads internal IO port
     fn read_internal_u8(&self, id: u8) -> u8;
+    /// Reads external IO port
     fn read_external_u8(&self, addr: u16) -> u8;
+    /// Writes to internal IO port
     fn write_internal_u8(&mut self, id: u8, val: u8);
+    /// Writes to external IO port
     fn write_external_u8(&mut self, addr: u16, val: u8);
 
+    /// Returns `true` if is on rising edge of the clock
     fn is_clock_rising(&self) -> bool;
+    // Get current clock pin value
     fn clock_pin(&self) -> PinState;
 
+    /// Get number of pins
     fn pin_count() -> usize;
+    /// Set input pin value
     fn set_pin(&mut self, pin: PinId, state: PinState);
+    /// Get output pin changes (by filling a [HashMap])
     fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>);
 }
 
+/// Main implementation for [IoControllerTrait]
 pub struct IoController<M: McuModel> {
     model: PhantomData<M>,
     clock_pin: PinState,

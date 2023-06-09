@@ -5,13 +5,29 @@ use crate::pins::{PinId, PinState};
 use crate::board::{ComponentId, Message, Board};
 use kanal;
 
+/// Top level component which can be placed on the [Board].
+/// 
+/// Every component is run in a separate thread, and must implement [VcdFiller] trait
+/// to extract VCD data.
+/// Implement this to make something addable to the simulation.
 pub trait Component: Send + VcdFiller {
+    /// Total number of external pins in the component.
     fn pin_count() -> usize;
-    fn get_name(&self) -> &str;
-    fn advance(&mut self);
+    /// Set external pin value.
+    /// 
+    /// Component can use data set through this method as input.
     fn set_pin(&mut self, pin: PinId, state: PinState);
+    /// Get updates of output pin values.
+    /// 
+    /// Updates must be added into the `changes` [HashMap].
     fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>);
+    /// Advance the simulation through one step.
+    /// 
+    /// After this step all the pin value changes must be accounted for.
+    fn advance(&mut self);
 
+    /// Main loop of the component.
+    /// Reacts to [messages](Message) passed through kanal channels.
     fn execute_loop(&mut self,
                     id: ComponentId,
                     output_tx: kanal::Sender<Message>,
@@ -42,6 +58,7 @@ pub trait Component: Send + VcdFiller {
 }
 
 impl Board {
+    /// Adds a [Component] to the [Board] with the specified [VcdConfig].
     pub fn add_component<T>(&mut self, component: T, name: &str, config: &VcdConfig) -> ComponentId
     where
         T: Component + 'static

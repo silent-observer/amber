@@ -1,3 +1,5 @@
+//! Simple LED component that can be used to capture a signal.
+
 use std::collections::HashMap;
 
 use crate::{pins::{PinState, PinId, PinStateConvertible}, component::Component, vcd::{fillers::VcdFiller, VcdTreeSignal}};
@@ -30,10 +32,6 @@ impl Component for Led {
     }
 
     fn fill_output_changes(&mut self, _changes: &mut HashMap<PinId, PinState>) {}
-
-    fn get_name(&self) -> &str {
-        "led"
-    }
 }
 
 impl VcdFiller for Led {

@@ -15,6 +15,7 @@ use crate::vcd::{VcdFiller, VcdTreeModule, VcdModuleBuilder};
 
 use super::{regfile::RegisterFile, mcu_model::McuModel, io_controller::{IoController, IoControllerTrait}, sreg::StatusRegister, bit_helpers::bit_field_combined};
 
+/// Internal AVR MCU structure.
 pub struct Mcu<M, Io>
 where
     M: McuModel + 'static,
@@ -42,6 +43,7 @@ impl<M> Default for Mcu<M, IoController<M>>
 where
     M: McuModel + 'static,
 {
+    /// Initializes MCU with a default [IoController].
     fn default() -> Mcu<M, IoController<M>> {
         let io = IoController::new();
         Mcu::new(io)
@@ -53,10 +55,11 @@ where
     M: McuModel + 'static,
     Io: IoControllerTrait,
 {
+    /// Creates a new MCU with a specified [IoControllerTrait].
     pub fn new(io: Io) -> Mcu<M, Io> {
         Mcu { 
             reg_file: RegisterFile::new(),
-            io: io,
+            io,
             sram: vec![0; SRAM_SIZE],
             flash: vec![0; M::flash_size()],
 
@@ -70,11 +73,13 @@ where
         }
     }
 
+    /// Executes one instruction at PC address and returns number of cycles.
     pub fn step(&mut self) -> u8 {
         let opcode: u16 = self.read_at_pc_offset(0);
         self.execute(opcode)
     }
 
+    /// Executes an opcode and returns number of cycles.
     fn execute(&mut self, opcode: u16) -> u8 {
         let head = (opcode >> 8) as u8;
         match head {
@@ -218,6 +223,7 @@ where
         }
     }
 
+    /// Loads flash memory from a slice
     pub fn load_flash(&mut self, data: &[u16]) {
         for (addr, &val) in data.iter().enumerate() {
             self.write_flash(addr as u32, val);
@@ -225,6 +231,16 @@ where
     }
 }
 
+/// An implementation for [VcdFiller].
+/// 
+/// [Mcu] is a module, containing the following signals and submodules:
+/// 
+/// ### Signals
+/// - `clk` - CPU clock.
+/// - `pc[31:0]` - Program counter (PC) register.
+/// ### Submodules
+/// - `regs` - Register file.
+/// - `sreg` - Status register.
 impl<M, Io> VcdFiller for Mcu<M, Io> 
 where
     M: McuModel + 'static,
@@ -258,6 +274,7 @@ mod test_helper {
         M: McuModel + 'static,
         Io: IoControllerTrait,
     {
+        /// Helper test function, for executing an instruction and checking the correct [StatusRegister] change.
         pub fn execute_and_assert_sreg(&mut self, opcode: u16, sreg_mask: &'static str) {
             let sreg_initial = self.sreg;
             self.execute(opcode);
