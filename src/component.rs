@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::vcd::{VcdFiller, VcdTree, VcdConfig, MutexVcdTree};
 use crate::pins::{PinId, PinState};
-use crate::board::{ComponentId, Message, Board};
+use crate::board::{ComponentId, Message, Board, ComponentHandle};
 use kanal;
 
 /// Top level component which can be placed on the [Board].
@@ -13,6 +13,8 @@ use kanal;
 pub trait Component: Send + VcdFiller {
     /// Total number of external pins in the component.
     fn pin_count() -> usize;
+    /// Find a pin given a name.
+    fn pin_name(pin: PinId) -> String;
     /// Set external pin value.
     /// 
     /// Component can use data set through this method as input.
@@ -35,7 +37,6 @@ pub trait Component: Send + VcdFiller {
                     vcd: MutexVcdTree) {
         let mut output_changes = HashMap::new();
         for m in input_rx {
-            println!("Component {:?} got a message: {:?}", id, m);
             match m {
                 Message::Die => break,
                 Message::PinChange(_, pin, state) => self.set_pin(pin, state),
@@ -59,14 +60,18 @@ pub trait Component: Send + VcdFiller {
 
 impl Board {
     /// Adds a [Component] to the [Board] with the specified [VcdConfig].
-    pub fn add_component<T>(&mut self, component: T, name: &str, config: &VcdConfig) -> ComponentId
+    pub fn add_component<T>(&mut self, component: T, name: &str, config: &VcdConfig) -> ComponentHandle
     where
         T: Component + 'static
     {
         let vcd_init: VcdTree = component.init_vcd(config);
+        let mut pin_name_lookup = HashMap::new();
+        for pin in 0..T::pin_count() {
+            pin_name_lookup.insert(T::pin_name(pin as u16), pin as u16);
+        }
         self.add_component_fn(move |id, output_tx, input_rx, vcd| {
             let mut c = component;
             c.execute_loop(id, output_tx, input_rx, vcd);
-        }, vcd_init, name, T::pin_count() as u16)
+        }, vcd_init, name, T::pin_count() as u16, pin_name_lookup)
     }
 }

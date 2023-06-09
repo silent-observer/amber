@@ -17,13 +17,13 @@ fn main() {
             clk
             pc
         });
-    board.add_clock_wire(&[(mcu, 0)]);
+    board.add_clock_wire(&[mcu.pin("CLK")]);
 
     let led = Led::new();
     let led = board.add_component(
         led, "led", 
         &VcdConfig::Enable);
-    board.add_wire(&[(mcu, 16), (led, 0)]);
+    board.add_wire(&[mcu.pin("PB7"), led.pin("LED")]);
 
-    board.simulate(50);
+    board.simulate(10);
 }

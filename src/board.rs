@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::thread::{JoinHandle, spawn};
 use kanal;
 
@@ -42,8 +43,8 @@ pub struct WireId(usize);
 #[derive(Debug, Clone, Copy)]
 pub struct ComponentId(usize);
 
-/// Internal component handle.
-struct ComponentHandle {
+/// Internal component data.
+struct ComponentData {
     /// Unique id of the component.
     id: ComponentId,
     /// Handle for the component thread.
@@ -51,10 +52,10 @@ struct ComponentHandle {
     /// Channel for transmitting messages into the component.
     input_tx: kanal::Sender<Message>,
     /// Vector of all the unque pin indices.
-    pins: Vec<PinIndex>
+    pins: Vec<PinIndex>,
 }
 
-impl ComponentHandle {
+impl ComponentData {
     /// Send [Message::PinChange].
     fn notify_on_pin_change(&self, pin: PinId, state: PinState) {
         self.input_tx
@@ -71,7 +72,7 @@ impl ComponentHandle {
 }
 
 /// When a handle is dropped, the corresponding component thread is stopped automatically.
-impl Drop for ComponentHandle {
+impl Drop for ComponentData {
     fn drop(&mut self) {
         self.input_tx.send(Message::Die).expect("Error sending update");
         self.thread.take().unwrap().join().unwrap();
@@ -171,7 +172,7 @@ pub struct Board {
     /// Transmitter corresponding to `output_rx`, to be cloned into every new component.
     output_tx: Option<kanal::Sender<Message>>,
     /// Vector of all components. Indexed by [ComponentId]
-    components: Vec<ComponentHandle>,
+    components: Vec<ComponentData>,
     /// Vector of all pins. Indexed by [PinIndex]
     pins: Vec<Pin>,
     /// Vector of all wires. Indexed by [WireId]
@@ -179,6 +180,21 @@ pub struct Board {
 
     /// A VCD file writer.
     vcd_writer: VcdWriter,
+}
+pub struct ComponentHandle {
+    id: ComponentId,
+    pin_name_lookup: HashMap<String, PinId>,
+}
+
+impl ComponentHandle {
+    pub fn pin(&self, name: &str) -> (ComponentId, PinId) {
+        (
+            self.id,
+            *self.pin_name_lookup
+                 .get(name)
+                 .expect("Such pin doesn't exist!")
+        )
+    }
 }
 
 impl Board {
@@ -217,7 +233,8 @@ impl Board {
                             f: F,
                             vcd: VcdTree,
                             name: &str,
-                            pins_count: u16) -> ComponentId
+                            pins_count: u16,
+                            pin_name_lookup: HashMap<String, PinId>) -> ComponentHandle
     where
         F: FnOnce(ComponentId, kanal::Sender<Message>, kanal::Receiver<Message>, MutexVcdTree) + Send + 'static
     {
@@ -241,7 +258,7 @@ impl Board {
             });
         }
 
-        let c = ComponentHandle {
+        let c = ComponentData {
             id: component_id,
             thread: Some(thread),
             pins,
@@ -253,7 +270,10 @@ impl Board {
         }
         self.components.push(c);
         
-        component_id
+        ComponentHandle {
+            id: component_id,
+            pin_name_lookup,
+        }
     }
 
     /// Gets [PinIndex] from [ComponentId] and [PinId].
@@ -361,7 +381,6 @@ impl Board {
         'outer_loop:
         loop {
             for m in &mut output_rx {
-                println!("Got message: {:?}", m);
                 match m {
                     Message::Step | Message::Die => {}
                     Message::Done(_component_id) => {
@@ -395,12 +414,21 @@ impl Board {
 
     /// Run the simulation for specified number of cycles.
     pub fn simulate(&mut self, cycles: u64) {
+        use indicatif::ProgressBar;
+
         self.vcd_writer.write_header();
+        let progress = if cycles < 1000 {
+                ProgressBar::hidden()
+            } else {
+                ProgressBar::new(cycles)
+            };
         for _ in 0..cycles {
             self.toggle_clock();
             self.vcd_writer.write_step();
             self.toggle_clock();
             self.vcd_writer.write_step();
+            progress.inc(1);
         }
+        progress.finish();
     }
 }

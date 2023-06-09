@@ -27,11 +27,15 @@ impl Component for Led {
         assert!(pin == 0);
         self.state = state;
         if self.state == PinState::High || self.state == PinState::Low {
-            println!("LED state: {:?}", self.state);
         }
     }
 
     fn fill_output_changes(&mut self, _changes: &mut HashMap<PinId, PinState>) {}
+
+    fn pin_name(pin_id: PinId) -> String {
+        assert_eq!(pin_id, 0);
+        "LED".to_string()
+    }
 }
 
 impl VcdFiller for Led {
