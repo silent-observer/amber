@@ -10,6 +10,7 @@ pub struct GpioPort {
 
     output_states: [PinState; 8],
     output_changes: Vec<(PinId, PinState)>,
+    readable_states: [PinState; 8],
     input_states: [PinState; 8],
 }
 
@@ -20,6 +21,7 @@ impl GpioPort {
             ddr_register: 0,
             output_states: [PinState::Z; 8],
             output_changes: Vec::with_capacity(8),
+            readable_states: [PinState::Z; 8],
             input_states: [PinState::Z; 8],
         }
     }
@@ -46,11 +48,15 @@ impl GpioPort {
     pub fn read_pin(&self) -> u8 {
         let mut x = 0;
         for i in 0..8 {
-            if self.input_states[i] == PinState::High {
+            if self.readable_states[i] == PinState::High {
                 x.set_bit(i, true);
             }
         }
         x
+    }
+
+    pub fn clock_rising_edge(&mut self) {
+        self.readable_states = self.input_states;
     }
 
     fn set_output_state(&mut self, i: usize, state: PinState) {
@@ -66,7 +72,7 @@ impl GpioPort {
             let dd = self.ddr_register.bit(i);
             match (dd, port) {
                 (false, false) => self.set_output_state(i, PinState::Z),
-                (false, true) => self.set_output_state(i, PinState::Z),
+                (false, true) => self.set_output_state(i, PinState::WeakHigh),
                 (true, false) => self.set_output_state(i, PinState::Low),
                 (true, true) => self.set_output_state(i, PinState::High),
             }

@@ -67,6 +67,7 @@ where
     }
 
     fn advance(&mut self) {
+        self.mcu.io.advance();
         if self.mcu.io.is_clock_rising() {
             self.tick()
         }
@@ -81,31 +82,7 @@ where
     }
 
     fn pin_name(pin: PinId) -> String {
-        match pin {
-            0 => "CLK".to_string(),
-            1..=86 => {
-                let mut s = String::with_capacity(3);
-                s.push('P');
-                let (port, i) = match pin {
-                    1 ..=8  => ('A', pin - 1),
-                    9 ..=16 => ('B', pin - 9),
-                    17..=24 => ('C', pin - 17),
-                    25..=32 => ('D', pin - 25),
-                    33..=40 => ('E', pin - 33),
-                    41..=48 => ('F', pin - 41),
-                    49..=54 => ('G', pin - 49),
-                    55..=62 => ('H', pin - 55),
-                    63..=70 => ('J', pin - 63),
-                    71..=78 => ('K', pin - 71),
-                    79..=86 => ('L', pin - 79),
-                    _ => panic!("Invalid pin number")
-                };
-                s.push(port);
-                s.push(char::from_digit(i as u32, 10).unwrap());
-                s
-            }
-            _ => panic!("Invalid pin number")
-        }
+        Io::pin_name(pin)
     }
 }
 
