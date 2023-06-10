@@ -5,6 +5,7 @@ mod transfer;
 mod branches;
 mod bitops;
 mod memory_controller;
+pub mod hex;
 
 use std::marker::PhantomData;
 

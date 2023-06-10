@@ -10,3 +10,6 @@ bitfield = "0.13.2"
 indicatif = "0.17.5"
 kanal = "0.1.0-pre8"
 mockall = "0.11.4"
+
+[profile.release] 
+debug = true

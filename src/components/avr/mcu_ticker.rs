@@ -54,6 +54,10 @@ where
     pub fn load_flash(&mut self, data: &[u16]) {
         self.mcu.load_flash(data);
     }
+    /// Loads MCU flash memory from a hex file.
+    pub fn load_flash_hex(&mut self, filename: &str) {
+        self.mcu.load_flash_hex(filename);
+    }
 }
 
 /// Custom [Component] implementation, forwarding everything to `IoController`.
