@@ -2,36 +2,9 @@ use std::collections::HashMap;
 use std::thread::{JoinHandle, spawn};
 use kanal;
 
+use crate::component::{Component, ComponentId, Message, ThreadlessComponent};
 use crate::pins::{PinId, PinState};
-use crate::vcd::{VcdTree, VcdWriter, MutexVcdTree};
-
-/// Messages used to communicate with components, working in other threads.
-/// 
-/// The main communication protocol is the following:
-/// ```none
-/// loop {
-///     Board -> PinChange(component, pin_1, pin_state_1) -> Component
-///     Board -> PinChange(component, pin_2, pin_state_2) -> Component
-///     ...
-///     Board -> PinChange(component, pin_n, pin_state_n) -> Component
-///     Board -> Step -> Component
-///     [Component advances a step using all the new pin states]
-///     Component -> Done(component)
-/// }
-/// Board -> Die -> Component
-/// [Component thread stops]
-/// ```
-#[derive(Debug, Clone)]
-pub enum Message {
-    /// Board to Component: advance a single step accounting for all the changes.
-    Step,
-    /// Component to Board: sent after Step is done.
-    Done(ComponentId),
-    /// Board to Component: stop component thread.
-    Die,
-    /// Board to Component: notify component about a pin changing state.
-    PinChange(ComponentId, PinId, PinState),
-}
+use crate::vcd::{VcdTree, VcdWriter, MutexVcdTree, VcdConfig};
 
 /// Index of a pin. Unlike [PinId], this is unique for the whole board, not only for one component.
 type PinIndex = usize;
@@ -39,23 +12,18 @@ type PinIndex = usize;
 /// A unique identifier for a wire.
 #[derive(Debug, Clone, Copy)]
 pub struct WireId(usize);
-/// A unique identifier for a component.
-#[derive(Debug, Clone, Copy)]
-pub struct ComponentId(usize);
 
 /// Internal component data.
-struct ComponentData {
+struct ThreadedComponentData {
     /// Unique id of the component.
     id: ComponentId,
     /// Handle for the component thread.
     thread: Option<JoinHandle<()>>,
     /// Channel for transmitting messages into the component.
     input_tx: kanal::Sender<Message>,
-    /// Vector of all the unque pin indices.
-    pins: Vec<PinIndex>,
 }
 
-impl ComponentData {
+impl ThreadedComponentData {
     /// Send [Message::PinChange].
     fn notify_on_pin_change(&self, pin: PinId, state: PinState) {
         self.input_tx
@@ -70,13 +38,36 @@ impl ComponentData {
             .expect("Error sending update");
     }
 }
-
 /// When a handle is dropped, the corresponding component thread is stopped automatically.
-impl Drop for ComponentData {
+impl Drop for ThreadedComponentData {
     fn drop(&mut self) {
         self.input_tx.send(Message::Die).expect("Error sending update");
         self.thread.take().unwrap().join().unwrap();
     }
+}
+
+struct ThreadlessComponentData {
+    /// Component data
+    component: Box<dyn ThreadlessComponent>,
+    /// VCD subtree
+    vcd: MutexVcdTree
+}
+
+impl ThreadlessComponentData {
+    /// Send [Message::PinChange].
+    fn set_pin(&mut self, pin: PinId, state: PinState) {
+        self.component.set_pin(pin, state);
+    }
+
+    /// Send [Message::Step].
+    fn execute_step(&mut self, output_changes: &mut HashMap<PinId, PinState>) {
+        self.component.execute_step(&self.vcd, output_changes);
+    }
+}
+
+enum ComponentData {
+    Threaded(ThreadedComponentData),
+    Threadless(ThreadlessComponentData)
 }
 
 /// A representation for a state of a single wire.
@@ -178,6 +169,10 @@ pub struct Board {
     /// Vector of all wires. Indexed by [WireId]
     wires: Vec<Wire>,
 
+    pin_mapping: Vec<Vec<PinIndex>>,
+
+    changed_components: Vec<bool>,
+
     /// A VCD file writer.
     vcd_writer: VcdWriter,
 }
@@ -216,37 +211,14 @@ impl Board {
             components: Vec::new(),
             pins: vec![clock_pin],
             wires: Vec::new(),
+            pin_mapping: Vec::new(),
+            changed_components: Vec::new(),
             
             vcd_writer: VcdWriter::new(vcd_path, freq),
         }
     }
 
-    /// Adds a new component to the board using a closure.
-    /// 
-    /// Using this you can add custom components without `Component` structure.
-    /// The component closure must accept component id, two channel sides for
-    /// transmitting and receiving messages, and also a VcdTree behind a mutex,
-    /// to be updated after every [Message::Step].
-    /// 
-    /// This also requires already initialized VcdTree.
-    pub fn add_component_fn<F>(&mut self,
-                            f: F,
-                            vcd: VcdTree,
-                            name: &str,
-                            pins_count: u16,
-                            pin_name_lookup: HashMap<String, PinId>) -> ComponentHandle
-    where
-        F: FnOnce(ComponentId, kanal::Sender<Message>, kanal::Receiver<Message>, MutexVcdTree) + Send + 'static
-    {
-        let (input_tx, input_rx) = kanal::unbounded();
-        let output_tx_copy = self.output_tx
-            .as_ref()
-            .expect("Cannot create a component without output transmitter")
-            .clone();
-        let component_id = ComponentId(self.components.len());
-        let vcd_mutex = self.vcd_writer.add(name, vcd);
-
-        let thread = spawn(move || f(component_id, output_tx_copy, input_rx, vcd_mutex));
+    fn add_pins(&mut self, pins_count: u16, component_id: ComponentId) {
         let mut pins = Vec::with_capacity(pins_count as usize);
         for id in 0..pins_count {
             pins.push(self.pins.len());
@@ -257,18 +229,43 @@ impl Board {
                 out_state: PinState::Z,
             });
         }
+        self.pin_mapping.push(pins);
+    }
 
-        let c = ComponentData {
+    /// Adds a [Component] to the [Board] with the specified [VcdConfig].
+    pub fn add_component<T>(&mut self, component: T, name: &str, config: &VcdConfig) -> ComponentHandle
+    where
+        T: Component + 'static
+    {
+        let vcd_init: VcdTree = component.init_vcd(config);
+        let pin_name_lookup = T::get_pin_name_lookup();
+
+        let (input_tx, input_rx) = kanal::unbounded();
+        let output_tx_copy = self.output_tx
+            .as_ref()
+            .expect("Cannot create a component without output transmitter")
+            .clone();
+        let component_id = ComponentId(self.components.len());
+        let vcd_mutex = self.vcd_writer.add(name, vcd_init);
+        let pins_count = T::pin_count() as PinId;
+
+        let thread = spawn(move || {
+            let mut c = component;
+            c.execute_loop(component_id, output_tx_copy, input_rx, vcd_mutex);
+        });
+        self.add_pins(pins_count, component_id);
+
+        let c = ThreadedComponentData {
             id: component_id,
             thread: Some(thread),
-            pins,
             input_tx
         };
 
         for id in 0..pins_count {
             c.notify_on_pin_change(id, PinState::Z);
         }
-        self.components.push(c);
+        self.components.push(ComponentData::Threaded(c));
+        self.changed_components.push(true);
         
         ComponentHandle {
             id: component_id,
@@ -276,9 +273,34 @@ impl Board {
         }
     }
 
-    /// Gets [PinIndex] from [ComponentId] and [PinId].
-    fn get_pin_index(&self, component_id: ComponentId, pin_id: PinId) -> PinIndex {
-        self.components[component_id.0].pins[pin_id as usize]
+    /// Adds a [Component] to the [Board] with the specified [VcdConfig].
+    pub fn add_component_threadless<T>(&mut self, component: T, name: &str, config: &VcdConfig) -> ComponentHandle
+    where
+        T: Component + 'static
+    {
+        let vcd_init: VcdTree = component.init_vcd(config);
+        let pin_name_lookup = T::get_pin_name_lookup();
+
+        let component_id = ComponentId(self.components.len());
+        let vcd = self.vcd_writer.add(name, vcd_init);
+        let pins_count = T::pin_count() as PinId;
+        self.add_pins(pins_count, component_id);
+
+        let mut c = ThreadlessComponentData {
+            component: Box::new(component),
+            vcd,
+        };
+        for id in 0..pins_count {
+            c.set_pin(id, PinState::Z);
+        }
+
+        self.components.push(ComponentData::Threadless(c));
+        self.changed_components.push(true);
+
+        ComponentHandle {
+            id: component_id,
+            pin_name_lookup,
+        }
     }
 
     /// Adds a new wire to the board, connecting specified pins.
@@ -290,7 +312,7 @@ impl Board {
 
         let wire_id = WireId(self.wires.len());
         for &(component_id, pin_id) in pins {
-            let index = self.get_pin_index(component_id, pin_id);
+            let index = self.pin_mapping[component_id.0][pin_id as usize];
             let pin = &mut self.pins[index];
             wire.pins.push(index);
             wire.counter.add(pin.out_state);
@@ -300,7 +322,12 @@ impl Board {
         let wire_state = wire.read();
         self.wires.push(wire);
         for &(ComponentId(component_id), pin_id) in pins {
-            self.components[component_id].notify_on_pin_change(pin_id, wire_state);
+            match &mut self.components[component_id] {
+                ComponentData::Threaded(c) =>
+                    c.notify_on_pin_change(pin_id, wire_state),
+                ComponentData::Threadless(c) =>
+                    c.set_pin(pin_id, wire_state),
+            }
         }
         wire_id
     }
@@ -316,7 +343,12 @@ impl Board {
 
         let wire_state = self.wires[wire_id.0].read();
         for &(ComponentId(component_id), pin_id) in pins {
-            self.components[component_id].notify_on_pin_change(pin_id, wire_state);
+            match &mut self.components[component_id] {
+                ComponentData::Threaded(c) =>
+                    c.notify_on_pin_change(pin_id, wire_state),
+                ComponentData::Threadless(c) =>
+                    c.set_pin(pin_id, wire_state),
+            }
         }
 
         wire_id
@@ -368,15 +400,23 @@ impl Board {
         if new_out_state != old_out_state {
             for &pin_index in &self.wires[wire_index].pins {
                 if let Some(ComponentId(index)) = self.pins[pin_index].component {
-                    self.components[index].notify_on_pin_change(self.pins[pin_index].id, new_out_state);
+                    let pin_id = self.pins[pin_index].id;
+                    match &mut self.components[index] {
+                        ComponentData::Threaded(c) =>
+                            c.notify_on_pin_change(pin_id, new_out_state),
+                        ComponentData::Threadless(c) =>
+                            c.set_pin(pin_id, new_out_state),
+                    }
+                    self.changed_components[index] = true;
                 }
             }
         }
     }
 
     /// Handle [messages](Message) for a single step of simulation.
-    pub fn handle_messages(&mut self) {
-        let mut done_counter = self.components.len();
+    pub fn handle_messages(&mut self, mut done_counter: i32) {
+        if done_counter == 0 {return;}
+
         let mut output_rx = self.output_rx.take().expect("Has to have output reciever");
         'outer_loop:
         loop {
@@ -388,7 +428,7 @@ impl Board {
                         if done_counter == 0 {break 'outer_loop;}
                     }
                     Message::PinChange(component_id, pin_id, state) => {
-                        let index = self.get_pin_index(component_id, pin_id);
+                        let index = self.pin_mapping[component_id.0][pin_id as usize];
                         self.set_pin(index, state);
                     }
                 }
@@ -405,11 +445,38 @@ impl Board {
         } else {
             self.set_pin(CLOCK_PIN, PinState::High);
         }
-        for c in &self.components {
-            c.notify_step();
+        let mut output_changes = HashMap::new();
+        let mut global_output_changes = HashMap::new();
+        for (component_id, c) in self.components.iter_mut().enumerate() {
+            if !self.changed_components[component_id] {continue;}
+            match c {
+                ComponentData::Threaded(c) => c.notify_step(),
+                ComponentData::Threadless(c) => {
+                    output_changes.clear();
+                    c.execute_step(&mut output_changes);
+                    for (&pin_id, &state) in &output_changes {
+                        let index = self.pin_mapping[component_id][pin_id as usize];
+                        global_output_changes.insert(index, state);
+                    }
+                }
+            }
+        }
+
+        let mut done_counter = 0;
+        for i in 0..self.components.len() {
+            if self.changed_components[i] {
+                if let ComponentData::Threaded(_) = self.components[i] {
+                    done_counter += 1;
+                }
+            }
+            self.changed_components[i] = false;
+        }
+
+        for (index, state) in global_output_changes {
+            self.set_pin(index, state);
         }
         
-        self.handle_messages();
+        self.handle_messages(done_counter);
     }
 
     /// Run the simulation for specified number of cycles.
