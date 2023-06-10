@@ -1,7 +1,7 @@
 use amber::{board::Board, components::{avr::Atmega2560, led::Led}, vcd::config::{VcdConfig}, vcd_config};
 
-// #[macro_use]
-// extern crate timeit;
+#[macro_use]
+extern crate timeit;
 
 fn main() {
     let mut board = Board::new("out.vcd", 16e6);
@@ -24,7 +24,7 @@ fn main() {
         &VcdConfig::Enable);
     board.add_wire(&[mcu.pin("PB7"), led.pin("LED")]);
 
-    // timeit!({
+    timeit!({
     board.simulate(16000000);
-    // });
+    });
 }

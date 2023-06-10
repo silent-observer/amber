@@ -1,9 +1,12 @@
+use std::cell::RefCell;
 use std::io::Write;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::{io::BufWriter, fs::File};
 
 use crate::pins::PinState;
 
-use super::{VcdTree, VcdForest, VcdTreeModule, VcdTreeSignal, MutexVcdTree};
+use super::{VcdTree, VcdForest, VcdTreeModule, VcdTreeSignal, MutexVcdTree, VcdTreeHandle};
 
 /// Writes VCD signals into a .vcd file.
 pub struct VcdWriter {
@@ -35,9 +38,14 @@ impl VcdWriter {
         }
     }
 
-    /// Adds a new component with given name into the [VcdWriter].
-    pub fn add(&mut self, name: &str, vcd: VcdTree) -> MutexVcdTree {
-        self.forest.add(name, vcd)
+    /// Adds a new threaded component with given name into the [VcdWriter].
+    pub fn add_threaded(&mut self, name: &str, vcd: VcdTree) -> Arc<Mutex<VcdTreeHandle>> {
+        self.forest.add_threaded(name, vcd)
+    }
+
+    /// Adds a new threadless component with given name into the [VcdWriter].
+    pub fn add_threadless(&mut self, name: &str, vcd: VcdTree) -> Rc<RefCell<VcdTreeHandle>> {
+        self.forest.add_threadless(name, vcd)
     }
 
     /// Generates a new VCD short idenitifer.
@@ -94,10 +102,16 @@ impl VcdWriter {
     fn write_scope_forest(f: &mut BufWriter<File>, wire_id: &mut Vec<u8>, tree: &mut VcdForest) {
         write!(f, "$scope module TOP $end\n").expect("Couldn't write scope");
         for (k, v) in &mut tree.0 {
-            Self::write_scope(f,
-                              wire_id,
-                              &mut v.lock().expect("Couldn't lock mutex"),
-                              k);
+            match v {
+                MutexVcdTree::Threaded(x) => 
+                    Self::write_scope(f, wire_id,
+                        &mut x.lock().expect("Couldn't lock mutex").tree,
+                        k),
+                MutexVcdTree::Threadless(x) => 
+                    Self::write_scope(f, wire_id,
+                        &mut x.borrow_mut().tree,
+                        k),
+            }
         }
         write!(f, "$upscope $end\n").expect("Couldn't write scope");
     }
@@ -157,9 +171,26 @@ impl VcdWriter {
     /// If `dumpvars` is `true`, then the whole tree is dumped, otherwise only the changes are.
     fn write_data_forest(f: &mut BufWriter<File>, tree: &VcdForest, dumpvars: bool) {
         for (_k, v) in &tree.0 {
-            Self::write_data(f,
-                             &v.lock().expect("Couldn't lock mutex"),
-                             dumpvars);
+            match v {
+                MutexVcdTree::Threaded(x) => {
+                    let guard = &mut *x.lock().expect("Couldn't lock mutex");
+                    if dumpvars || guard.changed {
+                        Self::write_data(f,
+                            &guard.tree,
+                            dumpvars);
+                    };
+                    guard.changed = false;
+                }
+                MutexVcdTree::Threadless(x) => {
+                    let guard = &mut *x.borrow_mut();
+                    if dumpvars || guard.changed {
+                        Self::write_data(f,
+                            &guard.tree,
+                            dumpvars)
+                    };
+                    guard.changed = false;
+                },
+            }
         }
     }
 
@@ -177,10 +208,34 @@ impl VcdWriter {
         write!(&mut self.f, "$end\n").expect("Couldn't write header");
     }
 
+    fn has_changed(&self) -> bool {
+        for (_k, v) in &self.forest.0 {
+            match v {
+                MutexVcdTree::Threaded(x) => {
+                    let guard = x.lock().expect("Couldn't lock mutex");
+                    if guard.changed {
+                        return true;
+                    };
+                }
+                MutexVcdTree::Threadless(x) => {
+                    let guard = x.borrow();
+                    if guard.changed{
+                        return true;
+                    };
+                },
+            }
+        }
+        false
+    }
+
     /// Writes a single step into a .vcd file.
     pub fn write_step(&mut self) {
-        write!(&mut self.f, "#{}\n", (self.counter as f64 * self.period).round() as u64).expect("Couldn't write timestep");
-        self.counter += 1;
-        Self::write_data_forest(&mut self.f, &mut self.forest, false);
+        if self.has_changed() {
+            write!(&mut self.f, "#{}\n", (self.counter as f64 * self.period).round() as u64).expect("Couldn't write timestep");
+            self.counter += 1;
+            Self::write_data_forest(&mut self.f, &mut self.forest, false);
+        } else {
+            self.counter += 1;
+        }
     }
 }

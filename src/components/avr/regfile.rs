@@ -32,10 +32,10 @@ impl VcdFiller for RegisterFile {
         }
     }
 
-    fn fill_module(&self, module: &mut VcdTreeModule) {
+    fn fill_module(&self, module: &mut VcdTreeModule, changed: &mut bool) {
         for i in 0..32 {
             let s = format!("r{}", i);
-            module.update_subsignal(&s, self.regs[i].to_pin_vec());
+            module.update_subsignal(&s, self.regs[i].to_pin_vec(), changed);
         }
     }
 }

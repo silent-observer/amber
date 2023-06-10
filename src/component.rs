@@ -1,6 +1,9 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-use crate::vcd::{VcdFiller, MutexVcdTree};
+use crate::vcd::{VcdFiller, VcdTreeHandle};
 use crate::pins::{PinId, PinState};
 use kanal;
 
@@ -70,11 +73,22 @@ pub trait Component: Send + VcdFiller {
     fn advance(&mut self);
 
     /// Execute a single step and output all changes
-    fn execute_step(&mut self, vcd: &MutexVcdTree, output_changes: &mut HashMap<PinId, PinState>) {
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>) {
         output_changes.clear();
         self.advance();
         self.fill_output_changes(output_changes);
-        self.fill_vcd(&mut vcd.lock().expect("Coundn't take mutex"));
+        let borrowed = &mut *vcd.borrow_mut();
+        self.fill_vcd(&mut borrowed.tree, &mut borrowed.changed);
+    }
+
+    /// Execute a single step and output all changes
+    fn execute_step_threaded(&mut self, vcd: &Arc<Mutex<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>) {
+        output_changes.clear();
+        self.advance();
+        self.fill_output_changes(output_changes);
+        
+        let guard = &mut *vcd.lock().expect("Coundn't take mutex");
+        self.fill_vcd(&mut guard.tree, &mut guard.changed);
     }
 
     /// Main loop of the component.
@@ -83,7 +97,7 @@ pub trait Component: Send + VcdFiller {
                     id: ComponentId,
                     output_tx: kanal::Sender<Message>,
                     input_rx: kanal::Receiver<Message>,
-                    vcd: MutexVcdTree) {
+                    vcd: Arc<Mutex<VcdTreeHandle>>) {
         let mut output_changes = HashMap::new();
         for m in input_rx {
             match m {
@@ -91,7 +105,7 @@ pub trait Component: Send + VcdFiller {
                 Message::PinChange(_, pin, state) => self.set_pin(pin, state),
                 Message::Done(_) => {},
                 Message::Step => {
-                    self.execute_step(&vcd, &mut output_changes);
+                    self.execute_step_threaded(&vcd, &mut output_changes);
                     for (&pin, &state) in output_changes.iter() {
                         output_tx.send(Message::PinChange(id, pin, state))
                                  .expect("Cannot send update");
@@ -106,7 +120,7 @@ pub trait Component: Send + VcdFiller {
 
 pub trait ThreadlessComponent {
     fn set_pin(&mut self, pin: PinId, state: PinState);
-    fn execute_step(&mut self, vcd: &MutexVcdTree, output_changes: &mut HashMap<PinId, PinState>);
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>);
 }
 
 impl<T: Component> ThreadlessComponent for T {
@@ -114,7 +128,7 @@ impl<T: Component> ThreadlessComponent for T {
         self.set_pin(pin, state);
     }
 
-    fn execute_step(&mut self, vcd: &MutexVcdTree, output_changes: &mut HashMap<PinId, PinState>) {
-        self.execute_step(vcd, output_changes);
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>) {
+        self.execute_step_threadless(vcd, output_changes);
     }
 }

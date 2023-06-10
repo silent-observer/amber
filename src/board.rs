@@ -1,10 +1,12 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::thread::{JoinHandle, spawn};
 use kanal;
 
 use crate::component::{Component, ComponentId, Message, ThreadlessComponent};
 use crate::pins::{PinId, PinState};
-use crate::vcd::{VcdTree, VcdWriter, MutexVcdTree, VcdConfig};
+use crate::vcd::{VcdTree, VcdWriter, VcdConfig, VcdTreeHandle};
 
 /// Index of a pin. Unlike [PinId], this is unique for the whole board, not only for one component.
 type PinIndex = usize;
@@ -50,7 +52,7 @@ struct ThreadlessComponentData {
     /// Component data
     component: Box<dyn ThreadlessComponent>,
     /// VCD subtree
-    vcd: MutexVcdTree
+    vcd: Rc<RefCell<VcdTreeHandle>>
 }
 
 impl ThreadlessComponentData {
@@ -61,7 +63,7 @@ impl ThreadlessComponentData {
 
     /// Send [Message::Step].
     fn execute_step(&mut self, output_changes: &mut HashMap<PinId, PinState>) {
-        self.component.execute_step(&self.vcd, output_changes);
+        self.component.execute_step_threadless(&self.vcd, output_changes);
     }
 }
 
@@ -246,7 +248,7 @@ impl Board {
             .expect("Cannot create a component without output transmitter")
             .clone();
         let component_id = ComponentId(self.components.len());
-        let vcd_mutex = self.vcd_writer.add(name, vcd_init);
+        let vcd_mutex = self.vcd_writer.add_threaded(name, vcd_init);
         let pins_count = T::pin_count() as PinId;
 
         let thread = spawn(move || {
@@ -282,7 +284,7 @@ impl Board {
         let pin_name_lookup = T::get_pin_name_lookup();
 
         let component_id = ComponentId(self.components.len());
-        let vcd = self.vcd_writer.add(name, vcd_init);
+        let vcd = self.vcd_writer.add_threadless(name, vcd_init);
         let pins_count = T::pin_count() as PinId;
         self.add_pins(pins_count, component_id);
 

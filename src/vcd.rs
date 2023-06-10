@@ -7,7 +7,7 @@ pub mod config;
 pub mod writer;
 pub mod builder;
 
-use std::{collections::HashMap, sync::{Mutex, Arc}};
+use std::{collections::HashMap, sync::{Mutex, Arc}, cell::{RefCell, Ref}, rc::Rc};
 
 use crate::pins::{PinState, PinStateConvertible};
 
@@ -44,8 +44,16 @@ pub struct VcdTreeSignal {
     new_state: Vec<PinState>,
 }
 
+pub struct VcdTreeHandle {
+    pub tree: VcdTree,
+    pub changed: bool
+}
+
 /// VCD tree behind a mutex, for passing to other threads.
-pub type MutexVcdTree = Arc<Mutex<VcdTree>>;
+enum MutexVcdTree {
+    Threaded(Arc<Mutex<VcdTreeHandle>>),
+    Threadless(Rc<RefCell<VcdTreeHandle>>),
+}
 
 /// Top level structure, containing multiple VCD trees for different components.
 /// 
@@ -65,20 +73,20 @@ impl VcdTreeModule {
     }
 
     /// Updates a child signal in this module.
-    pub fn update_subsignal(&mut self, key: &str, state: Vec<PinState>) {
+    pub fn update_subsignal(&mut self, key: &str, state: Vec<PinState>, changed: &mut bool) {
         if let Some(child) = self.0.get_mut(key) {
             match child {
                 VcdTree::Module(_) => panic!("Cannot update module as signal!"),
-                VcdTree::Signal(signal) => signal.update(state),
+                VcdTree::Signal(signal) => signal.update(state, changed),
                 VcdTree::Disabled => {},
             }
         }
     }
 
     /// Updates a child tree in this module using a [VcdFiller].
-    pub fn update_child<T: VcdFiller>(&mut self, key: &str, filler: &T) {
+    pub fn update_child<T: VcdFiller>(&mut self, key: &str, filler: &T, changed: &mut bool) {
         if let Some(child) = self.0.get_mut(key) {
-            filler.fill_vcd(child);
+            filler.fill_vcd(child, changed);
         }
     }
 }
@@ -95,8 +103,11 @@ impl VcdTreeSignal {
     }
 
     /// Updates signal's state.
-    pub fn update<T: PinStateConvertible>(&mut self, state: T) {
+    pub fn update<T: PinStateConvertible>(&mut self, state: T, changed: &mut bool) {
         self.old_state = std::mem::replace(&mut self.new_state, state.to_pin_vec().to_vec());
+        if self.old_state != self.new_state {
+            *changed = true;
+        }
     }
 }
 
@@ -106,10 +117,19 @@ impl VcdForest {
         VcdForest(HashMap::new())
     }
 
-    /// Adds a new component into the forest with the name `key`.
-    pub fn add(&mut self, key: &str, val: VcdTree) -> MutexVcdTree {
-        let mutex = Arc::new(Mutex::new(val));
-        self.0.insert(key.to_string(), mutex.clone());
+    /// Adds a new threaded component into the forest with the name `key`.
+    pub fn add_threaded(&mut self, key: &str, val: VcdTree) -> Arc<Mutex<VcdTreeHandle>> {
+        let handle = VcdTreeHandle{tree: val, changed: false};
+        let mutex = Arc::new(Mutex::new(handle));
+        self.0.insert(key.to_string(), MutexVcdTree::Threaded(mutex.clone()));
         mutex
+    }
+
+    /// Adds a new threadless component into the forest with the name `key`.
+    pub fn add_threadless(&mut self, key: &str, val: VcdTree) -> Rc<RefCell<VcdTreeHandle>> {
+        let handle = VcdTreeHandle{tree: val, changed: false};
+        let rc = Rc::new(RefCell::new(handle));
+        self.0.insert(key.to_string(), MutexVcdTree::Threadless(rc.clone()));
+        rc
     }
 }
