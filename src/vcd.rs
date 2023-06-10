@@ -9,7 +9,7 @@ pub mod builder;
 
 use std::{collections::HashMap, sync::{Mutex, Arc}, cell::{RefCell, Ref}, rc::Rc};
 
-use crate::pins::{PinState, PinStateConvertible};
+use crate::pins::{PinState, PinStateConvertible, PinVec};
 
 pub use fillers::VcdFiller;
 pub use config::VcdConfig;
@@ -35,13 +35,13 @@ pub struct VcdTreeModule(HashMap<String, VcdTree>);
 #[derive(Debug, Clone)]
 pub struct VcdTreeSignal {
     /// Number of bits in the signal
-    size: u16,
+    size: u8,
     /// Short ASCII id assigned to the signal by VCD
     id: Option<String>,
     /// Previous state of the signal, used to track changes
-    old_state: Vec<PinState>,
+    old_state: PinVec,
     /// Current state of the signal
-    new_state: Vec<PinState>,
+    new_state: PinVec,
 }
 
 pub struct VcdTreeHandle {
@@ -73,7 +73,7 @@ impl VcdTreeModule {
     }
 
     /// Updates a child signal in this module.
-    pub fn update_subsignal(&mut self, key: &str, state: Vec<PinState>, changed: &mut bool) {
+    pub fn update_subsignal(&mut self, key: &str, state: PinVec, changed: &mut bool) {
         if let Some(child) = self.0.get_mut(key) {
             match child {
                 VcdTree::Module(_) => panic!("Cannot update module as signal!"),
@@ -93,18 +93,18 @@ impl VcdTreeModule {
 
 impl VcdTreeSignal {
     /// Creates a new signal of specified size, filled initially with `val`.
-    pub fn new(size: u16, val: PinState) -> VcdTreeSignal {
+    pub fn new(size: u8, val: PinState) -> VcdTreeSignal {
         VcdTreeSignal {
             size,
             id: None,
-            old_state: vec![val; size as usize],
-            new_state: vec![val; size as usize]
+            old_state: PinVec::new(size, val),
+            new_state: PinVec::new(size, val)
         }
     }
 
     /// Updates signal's state.
     pub fn update<T: PinStateConvertible>(&mut self, state: T, changed: &mut bool) {
-        self.old_state = std::mem::replace(&mut self.new_state, state.to_pin_vec().to_vec());
+        self.old_state = std::mem::replace(&mut self.new_state, state.to_pin_vec());
         if self.old_state != self.new_state {
             *changed = true;
         }

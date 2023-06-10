@@ -17,7 +17,7 @@ impl VcdConfig {
     /// Creates a new signal according to the config.
     /// 
     /// If the signal is disabled, it is not created.
-    pub fn make_signal(&self, size: u16, val: PinState) -> VcdTree {
+    pub fn make_signal(&self, size: u8, val: PinState) -> VcdTree {
         match self {
             Self::Enable => VcdTree::Signal(VcdTreeSignal::new(size, val)),
             Self::Disable => VcdTree::Disabled,

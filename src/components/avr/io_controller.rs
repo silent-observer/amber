@@ -62,111 +62,104 @@ impl<M: McuModel + 'static> IoController<M>{
 }
 
 impl<M: McuModel> IoController<M> {
-    fn pin_number(pin: &'static str) -> PinId {
-        let bytes: Vec<u8> = pin.bytes().collect();
-        match bytes[..] {
-            [b'C', b'L', b'K'] => 0,
+    const PIN_CLK: PinId = 0;
 
-            [b'P', b'A', b'0'] => 1,
-            [b'P', b'A', b'1'] => 2,
-            [b'P', b'A', b'2'] => 3,
-            [b'P', b'A', b'3'] => 4,
-            [b'P', b'A', b'4'] => 5,
-            [b'P', b'A', b'5'] => 6,
-            [b'P', b'A', b'6'] => 7,
-            [b'P', b'A', b'7'] => 8,
+    const _PIN_PA0: PinId = 1;
+    const _PIN_PA1: PinId = 2;
+    const _PIN_PA2: PinId = 3;
+    const _PIN_PA3: PinId = 4;
+    const _PIN_PA4: PinId = 5;
+    const _PIN_PA5: PinId = 6;
+    const _PIN_PA6: PinId = 7;
+    const _PIN_PA7: PinId = 8;
 
-            [b'P', b'B', b'0'] => 1*8 + 1,
-            [b'P', b'B', b'1'] => 1*8 + 2,
-            [b'P', b'B', b'2'] => 1*8 + 3,
-            [b'P', b'B', b'3'] => 1*8 + 4,
-            [b'P', b'B', b'4'] => 1*8 + 5,
-            [b'P', b'B', b'5'] => 1*8 + 6,
-            [b'P', b'B', b'6'] => 1*8 + 7,
-            [b'P', b'B', b'7'] => 1*8 + 8,
+    const _PIN_PB0: PinId = 1*8 + 1;
+    const _PIN_PB1: PinId = 1*8 + 2;
+    const _PIN_PB2: PinId = 1*8 + 3;
+    const _PIN_PB3: PinId = 1*8 + 4;
+    const _PIN_PB4: PinId = 1*8 + 5;
+    const _PIN_PB5: PinId = 1*8 + 6;
+    const _PIN_PB6: PinId = 1*8 + 7;
+    const _PIN_PB7: PinId = 1*8 + 8;
 
-            [b'P', b'C', b'0'] => 2*8 + 1,
-            [b'P', b'C', b'1'] => 2*8 + 2,
-            [b'P', b'C', b'2'] => 2*8 + 3,
-            [b'P', b'C', b'3'] => 2*8 + 4,
-            [b'P', b'C', b'4'] => 2*8 + 5,
-            [b'P', b'C', b'5'] => 2*8 + 6,
-            [b'P', b'C', b'6'] => 2*8 + 7,
-            [b'P', b'C', b'7'] => 2*8 + 8,
+    const _PIN_PC0: PinId = 2*8 + 1;
+    const _PIN_PC1: PinId = 2*8 + 2;
+    const _PIN_PC2: PinId = 2*8 + 3;
+    const _PIN_PC3: PinId = 2*8 + 4;
+    const _PIN_PC4: PinId = 2*8 + 5;
+    const _PIN_PC5: PinId = 2*8 + 6;
+    const _PIN_PC6: PinId = 2*8 + 7;
+    const _PIN_PC7: PinId = 2*8 + 8;
 
-            [b'P', b'D', b'0'] => 3*8 + 1,
-            [b'P', b'D', b'1'] => 3*8 + 2,
-            [b'P', b'D', b'2'] => 3*8 + 3,
-            [b'P', b'D', b'3'] => 3*8 + 4,
-            [b'P', b'D', b'4'] => 3*8 + 5,
-            [b'P', b'D', b'5'] => 3*8 + 6,
-            [b'P', b'D', b'6'] => 3*8 + 7,
-            [b'P', b'D', b'7'] => 3*8 + 8,
+    const _PIN_PD0: PinId = 3*8 + 1;
+    const _PIN_PD1: PinId = 3*8 + 2;
+    const _PIN_PD2: PinId = 3*8 + 3;
+    const _PIN_PD3: PinId = 3*8 + 4;
+    const _PIN_PD4: PinId = 3*8 + 5;
+    const _PIN_PD5: PinId = 3*8 + 6;
+    const _PIN_PD6: PinId = 3*8 + 7;
+    const _PIN_PD7: PinId = 3*8 + 8;
 
-            [b'P', b'E', b'0'] => 4*8 + 1,
-            [b'P', b'E', b'1'] => 4*8 + 2,
-            [b'P', b'E', b'2'] => 4*8 + 3,
-            [b'P', b'E', b'3'] => 4*8 + 4,
-            [b'P', b'E', b'4'] => 4*8 + 5,
-            [b'P', b'E', b'5'] => 4*8 + 6,
-            [b'P', b'E', b'6'] => 4*8 + 7,
-            [b'P', b'E', b'7'] => 4*8 + 8,
+    const _PIN_PE0: PinId = 4*8 + 1;
+    const _PIN_PE1: PinId = 4*8 + 2;
+    const _PIN_PE2: PinId = 4*8 + 3;
+    const _PIN_PE3: PinId = 4*8 + 4;
+    const _PIN_PE4: PinId = 4*8 + 5;
+    const _PIN_PE5: PinId = 4*8 + 6;
+    const _PIN_PE6: PinId = 4*8 + 7;
+    const _PIN_PE7: PinId = 4*8 + 8;
 
-            [b'P', b'F', b'0'] => 5*8 + 1,
-            [b'P', b'F', b'1'] => 5*8 + 2,
-            [b'P', b'F', b'2'] => 5*8 + 3,
-            [b'P', b'F', b'3'] => 5*8 + 4,
-            [b'P', b'F', b'4'] => 5*8 + 5,
-            [b'P', b'F', b'5'] => 5*8 + 6,
-            [b'P', b'F', b'6'] => 5*8 + 7,
-            [b'P', b'F', b'7'] => 5*8 + 8,
+    const _PIN_PF0: PinId = 5*8 + 1;
+    const _PIN_PF1: PinId = 5*8 + 2;
+    const _PIN_PF2: PinId = 5*8 + 3;
+    const _PIN_PF3: PinId = 5*8 + 4;
+    const _PIN_PF4: PinId = 5*8 + 5;
+    const _PIN_PF5: PinId = 5*8 + 6;
+    const _PIN_PF6: PinId = 5*8 + 7;
+    const _PIN_PF7: PinId = 5*8 + 8;
 
-            [b'P', b'G', b'0'] => 6*8 + 1,
-            [b'P', b'G', b'1'] => 6*8 + 2,
-            [b'P', b'G', b'2'] => 6*8 + 3,
-            [b'P', b'G', b'3'] => 6*8 + 4,
-            [b'P', b'G', b'4'] => 6*8 + 5,
-            [b'P', b'G', b'5'] => 6*8 + 6,
+    const _PIN_PG0: PinId = 6*8 + 1;
+    const _PIN_PG1: PinId = 6*8 + 2;
+    const _PIN_PG2: PinId = 6*8 + 3;
+    const _PIN_PG3: PinId = 6*8 + 4;
+    const _PIN_PG4: PinId = 6*8 + 5;
+    const _PIN_PG5: PinId = 6*8 + 6;
 
-            [b'P', b'H', b'0'] => 6*8 + 6 + 1,
-            [b'P', b'H', b'1'] => 6*8 + 6 + 2,
-            [b'P', b'H', b'2'] => 6*8 + 6 + 3,
-            [b'P', b'H', b'3'] => 6*8 + 6 + 4,
-            [b'P', b'H', b'4'] => 6*8 + 6 + 5,
-            [b'P', b'H', b'5'] => 6*8 + 6 + 6,
-            [b'P', b'H', b'6'] => 6*8 + 6 + 7,
-            [b'P', b'H', b'7'] => 6*8 + 6 + 8,
+    const _PIN_PH0: PinId = 6*8 + 6 + 1;
+    const _PIN_PH1: PinId = 6*8 + 6 + 2;
+    const _PIN_PH2: PinId = 6*8 + 6 + 3;
+    const _PIN_PH3: PinId = 6*8 + 6 + 4;
+    const _PIN_PH4: PinId = 6*8 + 6 + 5;
+    const _PIN_PH5: PinId = 6*8 + 6 + 6;
+    const _PIN_PH6: PinId = 6*8 + 6 + 7;
+    const _PIN_PH7: PinId = 6*8 + 6 + 8;
 
-            [b'P', b'J', b'0'] => 7*8 + 6 + 1,
-            [b'P', b'J', b'1'] => 7*8 + 6 + 2,
-            [b'P', b'J', b'2'] => 7*8 + 6 + 3,
-            [b'P', b'J', b'3'] => 7*8 + 6 + 4,
-            [b'P', b'J', b'4'] => 7*8 + 6 + 5,
-            [b'P', b'J', b'5'] => 7*8 + 6 + 6,
-            [b'P', b'J', b'6'] => 7*8 + 6 + 7,
-            [b'P', b'J', b'7'] => 7*8 + 6 + 8,
+    const _PIN_PJ0: PinId = 7*8 + 6 + 1;
+    const _PIN_PJ1: PinId = 7*8 + 6 + 2;
+    const _PIN_PJ2: PinId = 7*8 + 6 + 3;
+    const _PIN_PJ3: PinId = 7*8 + 6 + 4;
+    const _PIN_PJ4: PinId = 7*8 + 6 + 5;
+    const _PIN_PJ5: PinId = 7*8 + 6 + 6;
+    const _PIN_PJ6: PinId = 7*8 + 6 + 7;
+    const _PIN_PJ7: PinId = 7*8 + 6 + 8;
 
-            [b'P', b'K', b'0'] => 8*8 + 6 + 1,
-            [b'P', b'K', b'1'] => 8*8 + 6 + 2,
-            [b'P', b'K', b'2'] => 8*8 + 6 + 3,
-            [b'P', b'K', b'3'] => 8*8 + 6 + 4,
-            [b'P', b'K', b'4'] => 8*8 + 6 + 5,
-            [b'P', b'K', b'5'] => 8*8 + 6 + 6,
-            [b'P', b'K', b'6'] => 8*8 + 6 + 7,
-            [b'P', b'K', b'7'] => 8*8 + 6 + 8,
+    const _PIN_PK0: PinId = 8*8 + 6 + 1;
+    const _PIN_PK1: PinId = 8*8 + 6 + 2;
+    const _PIN_PK2: PinId = 8*8 + 6 + 3;
+    const _PIN_PK3: PinId = 8*8 + 6 + 4;
+    const _PIN_PK4: PinId = 8*8 + 6 + 5;
+    const _PIN_PK5: PinId = 8*8 + 6 + 6;
+    const _PIN_PK6: PinId = 8*8 + 6 + 7;
+    const _PIN_PK7: PinId = 8*8 + 6 + 8;
 
-            [b'P', b'L', b'0'] => 9*8 + 6 + 1,
-            [b'P', b'L', b'1'] => 9*8 + 6 + 2,
-            [b'P', b'L', b'2'] => 9*8 + 6 + 3,
-            [b'P', b'L', b'3'] => 9*8 + 6 + 4,
-            [b'P', b'L', b'4'] => 9*8 + 6 + 5,
-            [b'P', b'L', b'5'] => 9*8 + 6 + 6,
-            [b'P', b'L', b'6'] => 9*8 + 6 + 7,
-            [b'P', b'L', b'7'] => 9*8 + 6 + 8,
-
-            _ => panic!("Invalid pin number")
-        }
-    }
+    const _PIN_PL0: PinId = 9*8 + 6 + 1;
+    const _PIN_PL1: PinId = 9*8 + 6 + 2;
+    const _PIN_PL2: PinId = 9*8 + 6 + 3;
+    const _PIN_PL3: PinId = 9*8 + 6 + 4;
+    const _PIN_PL4: PinId = 9*8 + 6 + 5;
+    const _PIN_PL5: PinId = 9*8 + 6 + 6;
+    const _PIN_PL6: PinId = 9*8 + 6 + 7;
+    const _PIN_PL7: PinId = 9*8 + 6 + 8;
 }
 
 impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
@@ -279,7 +272,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
     }
 
     fn set_pin(&mut self, pin: PinId, state: PinState) {
-        if pin == Self::pin_number("CLK") {
+        if pin == Self::PIN_CLK {
             self.is_clock_rising = self.clock_pin == PinState::Low && state == PinState::High;
             self.clock_pin = state;
         }

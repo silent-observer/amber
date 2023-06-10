@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::{io::BufWriter, fs::File};
 
-use crate::pins::PinState;
+use crate::pins::{PinState, PinVec};
 
 use super::{VcdTree, VcdForest, VcdTreeModule, VcdTreeSignal, MutexVcdTree, VcdTreeHandle};
 
@@ -127,9 +127,9 @@ impl VcdWriter {
     }
 
     /// Encodes multiple [PinState] for .vcd.
-    fn state_vec_to_char(state: &[PinState]) -> String {
-        let mut s = String::with_capacity(state.len());
-        for &x in state {
+    fn state_vec_to_char(state: &PinVec) -> String {
+        let mut s = String::with_capacity(state.len() as usize);
+        for x in state.iter() {
             s.push(Self::state_to_char(x));
         }
         s
@@ -152,10 +152,10 @@ impl VcdWriter {
                                             ..}) => {
                 if dumpvars || old_state != new_state {
                     if *size == 1 {
-                        write!(f, "{}{}\n", Self::state_to_char(new_state[0]), id)
+                        write!(f, "{}{}\n", Self::state_vec_to_char(new_state), id)
                             .expect("Couldn't write data");
                     } else {
-                        write!(f, "b{} {}\n", Self::state_vec_to_char(&new_state), id)
+                        write!(f, "b{} {}\n", Self::state_vec_to_char(new_state), id)
                             .expect("Couldn't write data");
                     }
                     

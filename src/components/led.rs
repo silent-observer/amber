@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::{pins::{PinState, PinId, PinStateConvertible}, component::Component, vcd::{fillers::VcdFiller, VcdTreeSignal}};
+use crate::{pins::{PinState, PinId, PinStateConvertible, PinVec}, component::Component, vcd::{fillers::VcdFiller, VcdTreeSignal}};
 
 pub struct Led {
     state: PinState,
@@ -45,7 +45,7 @@ impl VcdFiller for Led {
         VcdTreeSignal::new(1, PinState::Z)
     }
 
-    fn get_signal_state(&self) -> Vec<PinState> {
+    fn get_signal_state(&self) -> PinVec {
         self.state.to_pin_vec()
     }
 }

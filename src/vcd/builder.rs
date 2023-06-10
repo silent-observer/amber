@@ -15,7 +15,7 @@ impl<'a> VcdModuleBuilder<'a> {
     }
 
     /// Adds a new signal under a given `name`, with a given `size` and initial value.
-    pub fn add_signal(&mut self, name: &str, size: u16, val: PinState) {
+    pub fn add_signal(&mut self, name: &str, size: u8, val: PinState) {
         match self.config.get(name) {
             VcdConfig::Enable => {
                 let s = VcdTree::Signal(VcdTreeSignal::new(size, val));

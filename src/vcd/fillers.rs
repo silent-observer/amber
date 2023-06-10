@@ -1,4 +1,4 @@
-use crate::pins::PinState;
+use crate::pins::{PinState, PinVec};
 
 use super::{config::VcdConfig, VcdTree, VcdTreeModule, VcdTreeSignal, builder::VcdModuleBuilder};
 
@@ -55,7 +55,7 @@ pub trait VcdFiller {
     /// Read current signal state.
     /// 
     /// Override this if implementing a signal.
-    fn get_signal_state(&self) -> Vec<PinState> {
+    fn get_signal_state(&self) -> PinVec {
         panic!("Cannot fill this as a signal")
     }
 

@@ -57,57 +57,111 @@ impl PinState {
 /// This is unique only for every component.
 pub type PinId = u16;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinVec {
+    SinglePin(PinState),
+    SmallLogical {
+        size: u8,
+        bits: u32,
+    },
+    //Big(Vec<PinState>)
+}
+
+pub struct PinVecIter<'a> {
+    vec: &'a PinVec,
+    pos: u8
+}
+
+impl PinVec {
+    pub fn new(size: u8, val: PinState) -> PinVec {
+        if size == 1 {
+            PinVec::SinglePin(val)
+        } else {
+            let mut bits = 0;
+            for i in 0..size {
+                bits.set_bit(i as usize, val == PinState::High);
+            }
+            PinVec::SmallLogical { size, bits }
+        }
+    }
+
+    pub fn len(&self) -> u8 {
+        match self {
+            PinVec::SinglePin(_) => 1,
+            PinVec::SmallLogical { size, .. } => *size,
+        }
+    }
+
+    pub fn iter(&self) -> PinVecIter {
+        PinVecIter { vec: self, pos: 0 }
+    }
+}
+
+impl Iterator for PinVecIter<'_> {
+    type Item = PinState;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.vec {
+            PinVec::SinglePin(pin) => {
+                if self.pos == 0 {
+                    self.pos += 1;
+                    Some(*pin)
+                } else {None}
+            },
+            PinVec::SmallLogical { size, bits } => {
+                if self.pos < *size {
+                    if bits.bit(self.pos as usize) {
+                        self.pos += 1;
+                        Some(PinState::High)
+                    } else {
+                        self.pos += 1;
+                        Some(PinState::Low)
+                    }
+                } else {None}
+            },
+        }
+    }
+}
+
 /// Can be converted to a vector of [PinState].
 /// 
 /// This is used for VCD signals.
 pub trait PinStateConvertible {
-    fn to_pin_vec(self) -> Vec<PinState>;
+    fn to_pin_vec(self) -> PinVec;
 }
 
 impl PinStateConvertible for bool {
-    fn to_pin_vec(self) -> Vec<PinState> {
-        vec![PinState::from_bool(self)]
+    fn to_pin_vec(self) -> PinVec {
+        PinVec::SinglePin(PinState::from_bool(self))
     }
 }
 
 impl PinStateConvertible for u8 {
-    fn to_pin_vec(self) -> Vec<PinState> {
-        let mut result = vec![PinState::Low; 8];
-        for i in 0..8 {
-            result[i] = PinState::from_bool(self.bit(7-i));
-        }
-        result
+    fn to_pin_vec(self) -> PinVec {
+        PinVec::SmallLogical { size: 8, bits: self as u32 }
     }
 }
 
 impl PinStateConvertible for u16 {
-    fn to_pin_vec(self) -> Vec<PinState> {
-        let mut result = vec![PinState::Low; 16];
-        for i in 0..16 {
-            result[i] = PinState::from_bool(self.bit(15-i));
-        }
-        result
+    fn to_pin_vec(self) -> PinVec {
+        PinVec::SmallLogical { size: 16, bits: self as u32 }
     }
 }
 
 impl PinStateConvertible for u32 {
-    fn to_pin_vec(self) -> Vec<PinState> {
-        let mut result = vec![PinState::Low; 32];
-        for i in 0..32 {
-            result[i] = PinState::from_bool(self.bit(31-i));
-        }
-        result
+    fn to_pin_vec(self) -> PinVec {
+        PinVec::SmallLogical { size: 32, bits: self as u32 }
     }
 }
 
 impl PinStateConvertible for PinState {
-    fn to_pin_vec(self) -> Vec<PinState> {
-        vec![self]
+    fn to_pin_vec(self) -> PinVec {
+        PinVec::SinglePin(self)
     }
 }
 
-impl PinStateConvertible for Vec<PinState> {
-    fn to_pin_vec(self) -> Vec<PinState> {
+impl PinStateConvertible for PinVec {
+    fn to_pin_vec(self) -> PinVec {
         self
     }
 }
