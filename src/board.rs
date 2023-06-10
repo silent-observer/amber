@@ -62,7 +62,7 @@ impl ThreadlessComponentData {
     }
 
     /// Send [Message::Step].
-    fn execute_step(&mut self, output_changes: &mut HashMap<PinId, PinState>) {
+    fn execute_step(&mut self, output_changes: &mut Vec<(PinId, PinState)>) {
         self.component.execute_step_threadless(&self.vcd, output_changes);
     }
 }
@@ -447,8 +447,8 @@ impl Board {
         } else {
             self.set_pin(CLOCK_PIN, PinState::High);
         }
-        let mut output_changes = HashMap::new();
-        let mut global_output_changes = HashMap::new();
+        let mut output_changes = Vec::new();
+        let mut global_output_changes = Vec::new();
         for (component_id, c) in self.components.iter_mut().enumerate() {
             if !self.changed_components[component_id] {continue;}
             match c {
@@ -456,9 +456,9 @@ impl Board {
                 ComponentData::Threadless(c) => {
                     output_changes.clear();
                     c.execute_step(&mut output_changes);
-                    for (&pin_id, &state) in &output_changes {
+                    for &(pin_id, state) in output_changes.iter() {
                         let index = self.pin_mapping[component_id][pin_id as usize];
-                        global_output_changes.insert(index, state);
+                        global_output_changes.push((index, state));
                     }
                 }
             }
@@ -489,14 +489,16 @@ impl Board {
         let progress = if cycles < 1000 {
                 ProgressBar::hidden()
             } else {
-                ProgressBar::new(cycles)
+                ProgressBar::new(cycles / 1_000_000)
             };
-        for _ in 0..cycles {
+        for i in 0..cycles {
             self.toggle_clock();
             self.vcd_writer.write_step();
             self.toggle_clock();
             self.vcd_writer.write_step();
-            progress.inc(1);
+            if (i+1) % 1_000_000 == 0 {
+                progress.inc(1);
+            }
         }
         progress.finish();
     }

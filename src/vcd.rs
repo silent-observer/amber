@@ -24,12 +24,17 @@ pub enum VcdTree {
     Disabled
 }
 
+#[derive(Debug, Clone)]
+pub struct VcdTreeModuleEntry {
+    name: String,
+    val: Option<VcdTree>
+}
+
 /// A recursive node of a VCD tree.
 ///
 /// Can contain other modules and signals, accessed by their names.
 #[derive(Debug, Clone)]
-
-pub struct VcdTreeModule(HashMap<String, VcdTree>);
+pub struct VcdTreeModule(Vec<VcdTreeModuleEntry>);
 
 /// A leaf node of a VCD tree, containing a signal.
 #[derive(Debug, Clone)]
@@ -64,17 +69,19 @@ pub struct VcdForest(HashMap<String, MutexVcdTree>);
 impl VcdTreeModule {
     /// Creates a new empty module.
     pub fn new() -> VcdTreeModule {
-        VcdTreeModule(HashMap::new())
+        VcdTreeModule(Vec::new())
     }
 
     /// Adds a child VCD tree `val` under name `key`.
-    pub fn add(&mut self, key: &str, val: VcdTree) {
-        self.0.insert(key.to_string(), val);
+    #[inline]
+    pub fn add(&mut self, key: &str, val: Option<VcdTree>) {
+        self.0.push(VcdTreeModuleEntry { name: key.to_string(), val });
     }
 
     /// Updates a child signal in this module.
-    pub fn update_subsignal(&mut self, key: &str, state: PinVec, changed: &mut bool) {
-        if let Some(child) = self.0.get_mut(key) {
+    #[inline]
+    pub fn update_subsignal<T: PinStateConvertible>(&mut self, index: usize, state: T, changed: &mut bool) {
+        if let Some(child) = &mut self.0[index].val {
             match child {
                 VcdTree::Module(_) => panic!("Cannot update module as signal!"),
                 VcdTree::Signal(signal) => signal.update(state, changed),
@@ -84,8 +91,9 @@ impl VcdTreeModule {
     }
 
     /// Updates a child tree in this module using a [VcdFiller].
-    pub fn update_child<T: VcdFiller>(&mut self, key: &str, filler: &T, changed: &mut bool) {
-        if let Some(child) = self.0.get_mut(key) {
+    #[inline]
+    pub fn update_child<T: VcdFiller>(&mut self, index: usize, filler: &T, changed: &mut bool) {
+        if let Some(child) = &mut self.0[index].val {
             filler.fill_vcd(child, changed);
         }
     }
@@ -103,6 +111,7 @@ impl VcdTreeSignal {
     }
 
     /// Updates signal's state.
+    #[inline]
     pub fn update<T: PinStateConvertible>(&mut self, state: T, changed: &mut bool) {
         self.old_state = std::mem::replace(&mut self.new_state, state.to_pin_vec());
         if self.old_state != self.new_state {

@@ -19,9 +19,11 @@ impl<'a> VcdModuleBuilder<'a> {
         match self.config.get(name) {
             VcdConfig::Enable => {
                 let s = VcdTree::Signal(VcdTreeSignal::new(size, val));
-                self.module.add(name, s);
+                self.module.add(name, Some(s));
             }
-            VcdConfig::Disable => {},
+            VcdConfig::Disable => {
+                self.module.add(name, None);
+            },
             VcdConfig::Module(_) => panic!("Expected leaf config!"),
         }
     }
@@ -31,9 +33,11 @@ impl<'a> VcdModuleBuilder<'a> {
         match self.config.get(name) {
             VcdConfig::Enable | VcdConfig::Module(_) => {
                 let n = filler.init_vcd(self.config.get(name));
-                self.module.add(name, n);
+                self.module.add(name, Some(n));
             },
-            VcdConfig::Disable => {},
+            VcdConfig::Disable => {
+                self.module.add(name, None);
+            },
         }
     }
     

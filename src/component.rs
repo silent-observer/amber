@@ -66,14 +66,14 @@ pub trait Component: Send + VcdFiller {
     /// Get updates of output pin values.
     /// 
     /// Updates must be added into the `changes` [HashMap].
-    fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>);
+    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>);
     /// Advance the simulation through one step.
     /// 
     /// After this step all the pin value changes must be accounted for.
     fn advance(&mut self);
 
     /// Execute a single step and output all changes
-    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>) {
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut Vec<(PinId, PinState)>) {
         output_changes.clear();
         self.advance();
         self.fill_output_changes(output_changes);
@@ -82,7 +82,7 @@ pub trait Component: Send + VcdFiller {
     }
 
     /// Execute a single step and output all changes
-    fn execute_step_threaded(&mut self, vcd: &Arc<Mutex<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>) {
+    fn execute_step_threaded(&mut self, vcd: &Arc<Mutex<VcdTreeHandle>>, output_changes: &mut Vec<(PinId, PinState)>) {
         output_changes.clear();
         self.advance();
         self.fill_output_changes(output_changes);
@@ -98,7 +98,7 @@ pub trait Component: Send + VcdFiller {
                     output_tx: kanal::Sender<Message>,
                     input_rx: kanal::Receiver<Message>,
                     vcd: Arc<Mutex<VcdTreeHandle>>) {
-        let mut output_changes = HashMap::new();
+        let mut output_changes = Vec::new();
         for m in input_rx {
             match m {
                 Message::Die => break,
@@ -106,7 +106,7 @@ pub trait Component: Send + VcdFiller {
                 Message::Done(_) => {},
                 Message::Step => {
                     self.execute_step_threaded(&vcd, &mut output_changes);
-                    for (&pin, &state) in output_changes.iter() {
+                    for &(pin, state) in output_changes.iter() {
                         output_tx.send(Message::PinChange(id, pin, state))
                                  .expect("Cannot send update");
                     }
@@ -120,7 +120,7 @@ pub trait Component: Send + VcdFiller {
 
 pub trait ThreadlessComponent {
     fn set_pin(&mut self, pin: PinId, state: PinState);
-    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>);
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut Vec<(PinId, PinState)>);
 }
 
 impl<T: Component> ThreadlessComponent for T {
@@ -128,7 +128,7 @@ impl<T: Component> ThreadlessComponent for T {
         self.set_pin(pin, state);
     }
 
-    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut HashMap<PinId, PinState>) {
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, output_changes: &mut Vec<(PinId, PinState)>) {
         self.execute_step_threadless(vcd, output_changes);
     }
 }

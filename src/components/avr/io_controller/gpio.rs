@@ -12,6 +12,7 @@ pub struct GpioPort {
     output_changes: Vec<(PinId, PinState)>,
     readable_states: [PinState; 8],
     input_states: [PinState; 8],
+    pub changed: bool,
 }
 
 impl GpioPort {
@@ -23,24 +24,30 @@ impl GpioPort {
             output_changes: Vec::with_capacity(8),
             readable_states: [PinState::Z; 8],
             input_states: [PinState::Z; 8],
+            changed: false,
         }
     }
 
+    #[inline]
     pub fn set_input_pin(&mut self, pin: PinId, state: PinState) {
         assert!(pin < 8);
         self.input_states[pin as usize] = state.read();
     }
+    #[inline]
     pub fn get_output_changes(&self) -> &[(PinId, PinState)] {
         &self.output_changes
     }
+    #[inline]
     pub fn reset_pins(&mut self) {
         self.output_changes.clear()
     }
 
+    #[inline]
     pub fn read_port(&self) -> u8 {
         self.port_register
     }
 
+    #[inline]
     pub fn read_ddr(&self) -> u8 {
         self.ddr_register
     }
@@ -55,6 +62,7 @@ impl GpioPort {
         x
     }
 
+    #[inline]
     pub fn clock_rising_edge(&mut self) {
         self.readable_states = self.input_states;
     }
@@ -63,6 +71,7 @@ impl GpioPort {
         if self.output_states[i] != state {
             self.output_states[i] = state;
             self.output_changes.push((i as u16, state));
+            self.changed = true;
         }
     }
 
@@ -79,11 +88,13 @@ impl GpioPort {
         }
     }
 
+    #[inline]
     pub fn write_port(&mut self, val: u8) {
         self.port_register = val;
         self.update_outputs();
     }
 
+    #[inline]
     pub fn write_ddr(&mut self, val: u8) {
         self.ddr_register = val;
         self.update_outputs();

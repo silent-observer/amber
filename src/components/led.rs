@@ -30,7 +30,7 @@ impl Component for Led {
         }
     }
 
-    fn fill_output_changes(&mut self, _changes: &mut HashMap<PinId, PinState>) {}
+    fn fill_output_changes(&mut self, _changes: &mut Vec<(PinId, PinState)>) {}
 
     fn pin_name(pin_id: PinId) -> String {
         assert_eq!(pin_id, 0);

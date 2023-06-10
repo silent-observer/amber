@@ -34,7 +34,7 @@ pub trait IoControllerTrait: Send {
     /// Set input pin value
     fn set_pin(&mut self, pin: PinId, state: PinState);
     /// Get output pin changes (by filling a [HashMap])
-    fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>);
+    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>);
     /// Advance the simulation through one step.
     /// 
     /// After this step all the pin value changes must be accounted for.
@@ -327,21 +327,26 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
         }
     }
 
+    #[inline]
     fn is_clock_rising(&self) -> bool {
         self.is_clock_rising
     }
+    #[inline]
     fn clock_pin(&self) -> PinState {
         self.clock_pin
     }
 
-    fn fill_output_changes(&mut self, changes: &mut HashMap<PinId,PinState>) {
+    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>) {
         const GPIO_STARTS: [u16; 11] = [1, 9, 17, 25, 33, 41, 49, 55, 63, 71, 79];
         for (gpio_bank,     bank) in self.gpio.iter_mut().enumerate() {
-            for &(pin_index, state) in bank.get_output_changes() {
-                let pin = GPIO_STARTS[gpio_bank] + pin_index;
-                changes.insert(pin, state);
+            if bank.changed {
+                for &(pin_index, state) in bank.get_output_changes() {
+                    let pin = GPIO_STARTS[gpio_bank] + pin_index;
+                    changes.push((pin, state));
+                }
+                bank.reset_pins();
+                bank.changed = false;
             }
-            bank.reset_pins();
         }
     }
 

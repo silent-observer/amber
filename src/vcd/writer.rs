@@ -6,7 +6,7 @@ use std::{io::BufWriter, fs::File};
 
 use crate::pins::{PinState, PinVec};
 
-use super::{VcdTree, VcdForest, VcdTreeModule, VcdTreeSignal, MutexVcdTree, VcdTreeHandle};
+use super::{VcdTree, VcdForest, VcdTreeModule, VcdTreeSignal, MutexVcdTree, VcdTreeHandle, VcdTreeModuleEntry};
 
 /// Writes VCD signals into a .vcd file.
 pub struct VcdWriter {
@@ -73,10 +73,12 @@ impl VcdWriter {
     /// Recursively writes scope section of .vcd file.
     fn write_scope(f: &mut BufWriter<File>, wire_id: &mut Vec<u8>, tree: &mut VcdTree, name: &str) {
         match tree {
-            VcdTree::Module(VcdTreeModule(hash_map)) => {
+            VcdTree::Module(VcdTreeModule(vec)) => {
                 write!(f, "$scope module {} $end\n", name).expect("Couldn't write scope");
-                for (k, v) in hash_map {
-                    Self::write_scope(f, wire_id, v, k);
+                for VcdTreeModuleEntry{val, name} in vec {
+                    if let Some(v) = val {
+                        Self::write_scope(f, wire_id, v, name);
+                    }
                 }
                 write!(f, "$upscope $end\n").expect("Couldn't write scope");
             },
@@ -140,9 +142,11 @@ impl VcdWriter {
     /// If `dumpvars` is `true`, then the whole tree is dumped, otherwise only the changes are.
     fn write_data(f: &mut BufWriter<File>, tree: &VcdTree, dumpvars: bool) {
         match tree {
-            VcdTree::Module(VcdTreeModule(hash_map)) => {
-                for (_k, v) in hash_map {
-                    Self::write_data(f, v, dumpvars);
+            VcdTree::Module(VcdTreeModule(vec)) => {
+                for VcdTreeModuleEntry{val, ..} in vec {
+                    if let Some(v) = val {
+                        Self::write_data(f, v, dumpvars);
+                    }
                 }
             },
             VcdTree::Signal(VcdTreeSignal { id: Some(id),

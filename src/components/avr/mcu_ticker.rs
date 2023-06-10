@@ -81,7 +81,7 @@ where
         self.mcu.io.set_pin(pin, state)
     }
 
-    fn fill_output_changes(&mut self, changes: &mut HashMap<PinId, PinState>) {
+    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>) {
         self.mcu.io.fill_output_changes(changes)
     }
 

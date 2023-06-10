@@ -25,6 +25,6 @@ fn main() {
     board.add_wire(&[mcu.pin("PB7"), led.pin("LED")]);
 
     timeit!({
-    board.simulate(16000000);
+    board.simulate(16000000 * 5);
     });
 }

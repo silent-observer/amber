@@ -30,7 +30,7 @@ impl VcdFiller for StatusRegister {
 
     fn fill_module(&self, module: &mut VcdTreeModule, changed: &mut bool) {
         for i in 0..8 {
-            module.update_subsignal(BIT_NAMES[i], self.bit(i).to_pin_vec(), changed);
+            module.update_subsignal(i, self.bit(i).to_pin_vec(), changed);
         }
     }
 }

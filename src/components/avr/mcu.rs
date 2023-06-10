@@ -257,10 +257,10 @@ where
     }
 
     fn fill_module(&self, module: &mut VcdTreeModule, changed: &mut bool) {
-        module.update_subsignal("clk", self.io.clock_pin().to_pin_vec(), changed);
-        module.update_subsignal("pc", self.pc.to_pin_vec(), changed);
-        module.update_child("regs", &self.reg_file, changed);
-        module.update_child("sreg", &self.sreg, changed);
+        module.update_subsignal(0, self.io.clock_pin(), changed);
+        module.update_subsignal(1, self.pc, changed);
+        module.update_child(2, &self.reg_file, changed);
+        module.update_child(3, &self.sreg, changed);
     }
 }
 
