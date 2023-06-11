@@ -1,5 +1,7 @@
 use crate::pins::{PinId, PinState};
 
+#[allow(dead_code)]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CompareOutputMode {
     Disabled = 0,
@@ -8,6 +10,8 @@ enum CompareOutputMode {
     Set = 3
 }
 
+#[allow(dead_code)]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 enum ClockMode {
     Disabled = 0,
@@ -20,27 +24,29 @@ enum ClockMode {
     ExternalRising = 7,
 }
 
+#[allow(dead_code)]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 enum WaveformGenerationMode {
-    Normal,
-    Pwm8Bit,
-    Pwm9Bit,
-    Pwm10Bit,
+    Normal = 0,
+    Pwm8Bit = 1,
+    Pwm9Bit = 2,
+    Pwm10Bit = 3,
 
-    Ctc,
-    FastPwm8Bit,
-    FastPwm9Bit,
-    FastPwm10Bit,
+    Ctc = 4,
+    FastPwm8Bit = 5,
+    FastPwm9Bit = 6,
+    FastPwm10Bit = 7,
 
-    PwmPhaseFreqIcr,
-    PwmPhaseFreqOcrA,
-    PwmPhaseIcr,
-    PwmPhaseOcrA,
+    PwmPhaseFreqIcr = 8,
+    PwmPhaseFreqOcrA = 9,
+    PwmPhaseIcr = 10,
+    PwmPhaseOcrA = 11,
 
-    CtcIcr,
-    Reserved,
-    FastPwmIcr,
-    FastPwmOcrA,
+    CtcIcr = 12,
+    Reserved = 13,
+    FastPwmIcr = 14,
+    FastPwmOcrA = 15,
 }
 
 pub struct Timer16 {
