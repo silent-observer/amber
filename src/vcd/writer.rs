@@ -16,6 +16,8 @@ pub struct VcdWriter {
     wire_id: Vec<u8>,
     /// Current state of VCD signals
     forest: VcdForest,
+
+    changes: Vec<bool>,
     /// Current step
     counter: u64,
     /// Nanoseconds per step
@@ -33,6 +35,7 @@ impl VcdWriter {
             f: BufWriter::new(f),
             wire_id: vec![33],
             forest: VcdForest::new(),
+            changes: Vec::new(),
             counter: 1,
             period: 5e8 / freq
         }
@@ -40,11 +43,13 @@ impl VcdWriter {
 
     /// Adds a new threaded component with given name into the [VcdWriter].
     pub fn add_threaded(&mut self, name: &str, vcd: VcdTree) -> Arc<Mutex<VcdTreeHandle>> {
+        self.changes.push(false);
         self.forest.add_threaded(name, vcd)
     }
 
     /// Adds a new threadless component with given name into the [VcdWriter].
     pub fn add_threadless(&mut self, name: &str, vcd: VcdTree) -> Rc<RefCell<VcdTreeHandle>> {
+        self.changes.push(false);
         self.forest.add_threadless(name, vcd)
     }
 
@@ -173,26 +178,21 @@ impl VcdWriter {
     /// Writes data section of the whole [VcdForest] for the .vcd file.
     /// 
     /// If `dumpvars` is `true`, then the whole tree is dumped, otherwise only the changes are.
-    fn write_data_forest(f: &mut BufWriter<File>, tree: &VcdForest, dumpvars: bool) {
-        for (_k, v) in &tree.0 {
+    fn write_data_forest(f: &mut BufWriter<File>, tree: &VcdForest, changes: &Vec<bool>, dumpvars: bool) {
+        for (i, (_k, v)) in tree.0.iter().enumerate() {
+            if !changes[i] && !dumpvars {continue;}
             match v {
                 MutexVcdTree::Threaded(x) => {
                     let guard = &mut *x.lock().expect("Couldn't lock mutex");
-                    if dumpvars || guard.changed {
-                        Self::write_data(f,
-                            &guard.tree,
-                            dumpvars);
-                    };
-                    guard.changed = false;
+                    Self::write_data(f,
+                        &guard.tree,
+                        dumpvars);
                 }
                 MutexVcdTree::Threadless(x) => {
                     let guard = &mut *x.borrow_mut();
-                    if dumpvars || guard.changed {
-                        Self::write_data(f,
-                            &guard.tree,
-                            dumpvars)
-                    };
-                    guard.changed = false;
+                    Self::write_data(f,
+                        &guard.tree,
+                        dumpvars)
                 },
             }
         }
@@ -208,28 +208,26 @@ impl VcdWriter {
         Self::write_scope_forest(&mut self.f, &mut self.wire_id, &mut self.forest);
         write!(&mut self.f, "$enddefinitions $end\n$dumpvars\n")
             .expect("Couldn't write header");
-        Self::write_data_forest(&mut self.f, &mut self.forest, true);
+        Self::write_data_forest(&mut self.f, &mut self.forest, &self.changes, true);
         write!(&mut self.f, "$end\n").expect("Couldn't write header");
     }
 
+    #[inline]
     fn has_changed(&self) -> bool {
-        for (_k, v) in &self.forest.0 {
-            match v {
-                MutexVcdTree::Threaded(x) => {
-                    let guard = x.lock().expect("Couldn't lock mutex");
-                    if guard.changed {
-                        return true;
-                    };
-                }
-                MutexVcdTree::Threadless(x) => {
-                    let guard = x.borrow();
-                    if guard.changed{
-                        return true;
-                    };
-                },
-            }
+        for &x in &self.changes {
+            if x {return true;}
         }
         false
+    }
+
+    fn reset_changes(&mut self) {
+        for x in &mut self.changes {
+            *x = false;
+        }
+    }
+
+    pub fn set_change(&mut self, component_id: usize) {
+        self.changes[component_id] = true;
     }
 
     /// Writes a single step into a .vcd file.
@@ -237,9 +235,10 @@ impl VcdWriter {
         if self.has_changed() {
             write!(&mut self.f, "#{}\n", (self.counter as f64 * self.period).round() as u64).expect("Couldn't write timestep");
             self.counter += 1;
-            Self::write_data_forest(&mut self.f, &mut self.forest, false);
+            Self::write_data_forest(&mut self.f, &mut self.forest, &self.changes, false);
         } else {
             self.counter += 1;
         }
+        self.reset_changes();
     }
 }

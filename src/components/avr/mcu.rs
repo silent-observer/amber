@@ -256,11 +256,12 @@ where
         builder.add_node("sreg", &self.sreg);
     }
 
-    fn fill_module(&self, module: &mut VcdTreeModule, changed: &mut bool) {
-        module.update_subsignal(0, self.io.clock_pin(), changed);
-        module.update_subsignal(1, self.pc, changed);
-        module.update_child(2, &self.reg_file, changed);
-        module.update_child(3, &self.sreg, changed);
+    fn fill_module(&self, module: &mut VcdTreeModule) -> bool {
+        let mut r = module.update_subsignal(0, self.io.clock_pin());
+        r |= module.update_subsignal(1, self.pc);
+        r |= module.update_child(2, &self.reg_file);
+        r |= module.update_child(3, &self.sreg);
+        r
     }
 }
 

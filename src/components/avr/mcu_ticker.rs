@@ -100,7 +100,7 @@ where
     fn init_vcd(&self, config: &VcdConfig) -> VcdTree {
         self.mcu.init_vcd(config)
     }
-    fn fill_vcd(&self, tree: &mut VcdTree, changed: &mut bool) {
-        self.mcu.fill_vcd(tree, changed)
+    fn fill_vcd(&self, tree: &mut VcdTree) -> bool {
+        self.mcu.fill_vcd(tree)
     }
 }

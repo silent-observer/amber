@@ -62,8 +62,8 @@ impl ThreadlessComponentData {
     }
 
     /// Send [Message::Step].
-    fn execute_step(&mut self, output_changes: &mut Vec<(PinId, PinState)>) {
-        self.component.execute_step_threadless(&self.vcd, output_changes);
+    fn execute_step(&mut self, output_changes: &mut Vec<(PinId, PinState)>) -> bool {
+        self.component.execute_step_threadless(&self.vcd, output_changes)
     }
 }
 
@@ -425,8 +425,11 @@ impl Board {
             for m in &mut output_rx {
                 match m {
                     Message::Step | Message::Die => {}
-                    Message::Done(_component_id) => {
+                    Message::Done(component_id, vcd_changed) => {
                         done_counter -= 1;
+                        if vcd_changed {
+                            self.vcd_writer.set_change(component_id.0);
+                        }
                         if done_counter == 0 {break 'outer_loop;}
                     }
                     Message::PinChange(component_id, pin_id, state) => {
@@ -440,22 +443,27 @@ impl Board {
     }
 
     /// Toggle a clock pin once.
-    pub fn toggle_clock(&mut self) {
+    /// 
+    /// Returns whether VCD has changed.
+    pub fn toggle_clock(&mut self, output_changes: &mut Vec<(PinId, PinState)>, global_output_changes: &mut Vec<(PinIndex, PinState)>) {
         const CLOCK_PIN: PinIndex = 0;
         if self.pins[CLOCK_PIN].out_state == PinState::High {
             self.set_pin(CLOCK_PIN, PinState::Low);
         } else {
             self.set_pin(CLOCK_PIN, PinState::High);
         }
-        let mut output_changes = Vec::new();
-        let mut global_output_changes = Vec::new();
+        global_output_changes.clear();
         for (component_id, c) in self.components.iter_mut().enumerate() {
             if !self.changed_components[component_id] {continue;}
             match c {
                 ComponentData::Threaded(c) => c.notify_step(),
                 ComponentData::Threadless(c) => {
+
                     output_changes.clear();
-                    c.execute_step(&mut output_changes);
+                    let vcd_changed = c.execute_step(output_changes);
+                    if vcd_changed {
+                        self.vcd_writer.set_change(component_id);
+                    }
                     for &(pin_id, state) in output_changes.iter() {
                         let index = self.pin_mapping[component_id][pin_id as usize];
                         global_output_changes.push((index, state));
@@ -474,7 +482,7 @@ impl Board {
             self.changed_components[i] = false;
         }
 
-        for (index, state) in global_output_changes {
+        for &(index, state) in global_output_changes.iter() {
             self.set_pin(index, state);
         }
         
@@ -491,10 +499,14 @@ impl Board {
             } else {
                 ProgressBar::new(cycles / 1_000_000)
             };
+        
+        let mut output_changes = Vec::new();
+        let mut global_output_changes = Vec::new();
+
         for i in 0..cycles {
-            self.toggle_clock();
+            self.toggle_clock(&mut output_changes, &mut global_output_changes);
             self.vcd_writer.write_step();
-            self.toggle_clock();
+            self.toggle_clock(&mut output_changes, &mut global_output_changes);
             self.vcd_writer.write_step();
             if (i+1) % 1_000_000 == 0 {
                 progress.inc(1);

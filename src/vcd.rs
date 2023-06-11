@@ -50,8 +50,7 @@ pub struct VcdTreeSignal {
 }
 
 pub struct VcdTreeHandle {
-    pub tree: VcdTree,
-    pub changed: bool
+    pub tree: VcdTree
 }
 
 /// VCD tree behind a mutex, for passing to other threads.
@@ -64,7 +63,7 @@ enum MutexVcdTree {
 /// 
 /// Every VCD tree in the [VcdForest] is stored behind a mutex,
 /// since every component works in a different thread.
-pub struct VcdForest(HashMap<String, MutexVcdTree>);
+pub struct VcdForest(Vec<(String, MutexVcdTree)>);
 
 impl VcdTreeModule {
     /// Creates a new empty module.
@@ -80,21 +79,25 @@ impl VcdTreeModule {
 
     /// Updates a child signal in this module.
     #[inline]
-    pub fn update_subsignal<T: PinStateConvertible>(&mut self, index: usize, state: T, changed: &mut bool) {
+    pub fn update_subsignal<T: PinStateConvertible>(&mut self, index: usize, state: T) -> bool {
         if let Some(child) = &mut self.0[index].val {
             match child {
                 VcdTree::Module(_) => panic!("Cannot update module as signal!"),
-                VcdTree::Signal(signal) => signal.update(state, changed),
-                VcdTree::Disabled => {},
+                VcdTree::Signal(signal) => signal.update(state),
+                VcdTree::Disabled => {false},
             }
+        } else {
+            false
         }
     }
 
     /// Updates a child tree in this module using a [VcdFiller].
     #[inline]
-    pub fn update_child<T: VcdFiller>(&mut self, index: usize, filler: &T, changed: &mut bool) {
+    pub fn update_child<T: VcdFiller>(&mut self, index: usize, filler: &T) -> bool {
         if let Some(child) = &mut self.0[index].val {
-            filler.fill_vcd(child, changed);
+            filler.fill_vcd(child)
+        } else {
+            false
         }
     }
 }
@@ -112,33 +115,31 @@ impl VcdTreeSignal {
 
     /// Updates signal's state.
     #[inline]
-    pub fn update<T: PinStateConvertible>(&mut self, state: T, changed: &mut bool) {
+    pub fn update<T: PinStateConvertible>(&mut self, state: T) -> bool {
         self.old_state = std::mem::replace(&mut self.new_state, state.to_pin_vec());
-        if self.old_state != self.new_state {
-            *changed = true;
-        }
+        self.old_state != self.new_state
     }
 }
 
 impl VcdForest {
     /// Creates an empty VCD forest.
     pub fn new() -> VcdForest {
-        VcdForest(HashMap::new())
+        VcdForest(Vec::new())
     }
 
     /// Adds a new threaded component into the forest with the name `key`.
     pub fn add_threaded(&mut self, key: &str, val: VcdTree) -> Arc<Mutex<VcdTreeHandle>> {
-        let handle = VcdTreeHandle{tree: val, changed: false};
+        let handle = VcdTreeHandle{tree: val};
         let mutex = Arc::new(Mutex::new(handle));
-        self.0.insert(key.to_string(), MutexVcdTree::Threaded(mutex.clone()));
+        self.0.push((key.to_string(), MutexVcdTree::Threaded(mutex.clone())));
         mutex
     }
 
     /// Adds a new threadless component into the forest with the name `key`.
     pub fn add_threadless(&mut self, key: &str, val: VcdTree) -> Rc<RefCell<VcdTreeHandle>> {
-        let handle = VcdTreeHandle{tree: val, changed: false};
+        let handle = VcdTreeHandle{tree: val};
         let rc = Rc::new(RefCell::new(handle));
-        self.0.insert(key.to_string(), MutexVcdTree::Threadless(rc.clone()));
+        self.0.push((key.to_string(), MutexVcdTree::Threadless(rc.clone())));
         rc
     }
 }

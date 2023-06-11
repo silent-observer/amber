@@ -49,7 +49,7 @@ pub trait VcdFiller {
     /// Update [VcdTreeModule] with new signals.
     /// 
     /// Override this if implementing a module.
-    fn fill_module(&self, _module: &mut VcdTreeModule, changed: &mut bool) {
+    fn fill_module(&self, _module: &mut VcdTreeModule) -> bool {
         panic!("Cannot fill this as a module")
     }
     /// Read current signal state.
@@ -64,19 +64,19 @@ pub trait VcdFiller {
     /// [get_signal_state](VcdFiller::get_signal_state).
     /// 
     /// Override this if using a custom initializer.
-    fn fill_vcd(&self, tree: &mut VcdTree, changed: &mut bool) {
+    fn fill_vcd(&self, tree: &mut VcdTree) -> bool {
         if Self::IS_SIGNAL {
             match tree {
                 VcdTree::Module(_) => panic!("This can only fill a signal node!"),
-                VcdTree::Disabled => {},
+                VcdTree::Disabled => {false},
                 VcdTree::Signal(signal) => {
-                    signal.update(self.get_signal_state(), changed)
+                    signal.update(self.get_signal_state())
                 }
             }
         } else {
             match tree {
-                VcdTree::Module(module) => self.fill_module(module, changed),
-                VcdTree::Disabled => {},
+                VcdTree::Module(module) => self.fill_module(module),
+                VcdTree::Disabled => {false},
                 VcdTree::Signal(_) => panic!("This can only fill a module node!"),
             }
         }
