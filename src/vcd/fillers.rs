@@ -67,16 +67,16 @@ pub trait VcdFiller {
     fn fill_vcd(&self, tree: &mut VcdTree) -> bool {
         if Self::IS_SIGNAL {
             match tree {
-                VcdTree::Module(_) => panic!("This can only fill a signal node!"),
                 VcdTree::Disabled => {false},
+                VcdTree::Module(_) => panic!("This can only fill a signal node!"),
                 VcdTree::Signal(signal) => {
                     signal.update(self.get_signal_state())
                 }
             }
         } else {
             match tree {
-                VcdTree::Module(module) => self.fill_module(module),
                 VcdTree::Disabled => {false},
+                VcdTree::Module(module) => self.fill_module(module),
                 VcdTree::Signal(_) => panic!("This can only fill a module node!"),
             }
         }

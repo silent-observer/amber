@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use crate::vcd::{VcdFiller, VcdTreeHandle};
+use crate::vcd::{VcdFiller, VcdTreeHandle, VcdTree};
 use crate::pins::{PinId, PinState};
 use kanal;
 
@@ -83,12 +83,20 @@ pub trait Component: Send + VcdFiller {
     
     fn fill_everything_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]) {
         let borrowed = &mut *vcd.borrow_mut();
-        (self.fill_vcd(&mut borrowed.tree), self.get_output_changes())
+        let vcd_changed = match &mut borrowed.tree {
+            VcdTree::Disabled => {false},
+            tree => self.fill_vcd(tree),
+        };
+        (vcd_changed, self.get_output_changes())
     }
 
     fn fill_everything_threaded(&mut self, vcd: &Arc<Mutex<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]) {
         let guard = &mut *vcd.lock().expect("Coundn't take mutex");
-        (self.fill_vcd(&mut guard.tree), self.get_output_changes())
+        let vcd_changed = match &mut guard.tree {
+            VcdTree::Disabled => {false},
+            tree => self.fill_vcd(tree),
+        };
+        (vcd_changed, self.get_output_changes())
     }
 
     /// Main loop of the component.

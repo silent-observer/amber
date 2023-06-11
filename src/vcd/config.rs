@@ -48,6 +48,14 @@ impl VcdConfig {
             }
         }
     }
+
+    pub fn new_module(hash_map: HashMap<String, VcdConfig>) -> VcdConfig {
+        if hash_map.len() == 0 {
+            VcdConfig::Disable
+        } else {
+            VcdConfig::Module(hash_map)
+        }
+    }
 }
 
 
@@ -59,7 +67,7 @@ macro_rules! vcd_config_module_list {
         $hash_map.insert(stringify!($x).to_string(), {
             let mut submodule = std::collections::HashMap::new();
             $crate::vcd_config_module_list!(submodule; $($internal)*);
-            VcdConfig::Module(submodule)
+            VcdConfig::new_module(submodule)
         });
         $crate::vcd_config_module_list!($hash_map; $($tail)*)
     };
@@ -94,7 +102,7 @@ macro_rules! vcd_config {
         {
             let mut hash_map = std::collections::HashMap::new();
             $crate::vcd_config_module_list!(hash_map; $($tail)*);
-            VcdConfig::Module(hash_map)
+            VcdConfig::new_module(hash_map)
         }
     };
 }

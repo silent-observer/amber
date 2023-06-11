@@ -147,6 +147,7 @@ impl VcdWriter {
     /// If `dumpvars` is `true`, then the whole tree is dumped, otherwise only the changes are.
     fn write_data(f: &mut BufWriter<File>, tree: &VcdTree, dumpvars: bool) {
         match tree {
+            VcdTree::Disabled => {}
             VcdTree::Module(VcdTreeModule(vec)) => {
                 for VcdTreeModuleEntry{val, ..} in vec {
                     if let Some(v) = val {
