@@ -69,7 +69,7 @@ pub enum PinVec {
 
 pub struct PinVecIter<'a> {
     vec: &'a PinVec,
-    pos: u8
+    pos: i8
 }
 
 impl PinVec {
@@ -93,7 +93,7 @@ impl PinVec {
     }
 
     pub fn iter(&self) -> PinVecIter {
-        PinVecIter { vec: self, pos: 0 }
+        PinVecIter { vec: self, pos: self.len() as i8 - 1 }
     }
 }
 
@@ -104,17 +104,17 @@ impl Iterator for PinVecIter<'_> {
         match self.vec {
             PinVec::SinglePin(pin) => {
                 if self.pos == 0 {
-                    self.pos += 1;
+                    self.pos -= 1;
                     Some(*pin)
                 } else {None}
             },
-            PinVec::SmallLogical { size, bits } => {
-                if self.pos < *size {
+            PinVec::SmallLogical { bits, .. } => {
+                if self.pos >= 0 {
                     if bits.bit(self.pos as usize) {
-                        self.pos += 1;
+                        self.pos -= 1;
                         Some(PinState::High)
                     } else {
-                        self.pos += 1;
+                        self.pos -= 1;
                         Some(PinState::Low)
                     }
                 } else {None}

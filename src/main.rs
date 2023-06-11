@@ -4,7 +4,7 @@ use amber::{board::Board, components::{avr::Atmega2560, led::Led}, vcd::config::
 extern crate timeit;
 
 fn main() {
-    let mut board = Board::new("out.vcd", 16e6);
+    let mut board = Board::new("out_full.vcd", 16e6);
     let mut mcu = Atmega2560::new();
     mcu.load_flash_hex("hex/blink.hex");
 
@@ -12,9 +12,9 @@ fn main() {
         mcu, "mcu", 
         
         &vcd_config!{
-        //    clk,
-        //    regs
-        //    pc
+            // clk
+            // regs
+            // pc
         });
     board.add_clock_wire(&mcu);
 
@@ -25,6 +25,6 @@ fn main() {
     board.add_wire(&[mcu.pin("PB7"), led.pin("LED")]);
 
     timeit!({
-    board.simulate(16000000 * 5);
+    board.simulate(16000000);
     });
 }
