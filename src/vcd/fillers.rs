@@ -1,4 +1,4 @@
-use crate::pins::{PinState, PinVec};
+use crate::pins::PinVec;
 
 use super::{config::VcdConfig, VcdTree, VcdTreeModule, VcdTreeSignal, builder::VcdModuleBuilder};
 

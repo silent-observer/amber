@@ -1,7 +1,5 @@
 //! Simple LED component that can be used to capture a signal.
 
-use std::collections::HashMap;
-
 use crate::{pins::{PinState, PinId, PinStateConvertible, PinVec}, component::Component, vcd::{fillers::VcdFiller, VcdTreeSignal}};
 
 pub struct Led {
@@ -30,11 +28,21 @@ impl Component for Led {
         }
     }
 
-    fn fill_output_changes(&mut self, _changes: &mut Vec<(PinId, PinState)>) {}
+    fn get_output_changes(&mut self) -> &[(PinId, PinState)] {
+        &[]
+    }
 
     fn pin_name(pin_id: PinId) -> String {
         assert_eq!(pin_id, 0);
         "LED".to_string()
+    }
+
+    fn clock_rising_edge(&mut self) {
+        unimplemented!()
+    }
+
+    fn clock_falling_edge(&mut self) {
+        unimplemented!()
     }
 }
 

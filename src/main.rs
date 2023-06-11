@@ -16,7 +16,7 @@ fn main() {
         //    regs
         //    pc
         });
-    board.add_clock_wire(&[mcu.pin("CLK")]);
+    board.add_clock_wire(&mcu);
 
     let led = Led::new();
     let led = board.add_component(

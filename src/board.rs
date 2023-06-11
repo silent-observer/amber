@@ -39,6 +39,20 @@ impl ThreadedComponentData {
             .send(Message::Step)
             .expect("Error sending update");
     }
+
+    /// Send [Message::ClockRising].
+    fn notify_clock_rising_edge(&self) {
+        self.input_tx
+            .send(Message::ClockRising)
+            .expect("Error sending update");
+    }
+
+    /// Send [Message::ClockFalling].
+    fn notify_clock_falling_edge(&self) {
+        self.input_tx
+            .send(Message::ClockFalling)
+            .expect("Error sending update");
+    }
 }
 /// When a handle is dropped, the corresponding component thread is stopped automatically.
 impl Drop for ThreadedComponentData {
@@ -61,9 +75,19 @@ impl ThreadlessComponentData {
         self.component.set_pin(pin, state);
     }
 
+    /// Send [Message::ClockRising].
+    fn clock_rising_edge(&mut self) -> (bool, &[(PinId, PinState)]) {
+        self.component.clock_rising_edge_threadless(&self.vcd)
+    }
+
+    /// Send [Message::ClockFalling].
+    fn clock_falling_edge(&mut self) -> (bool, &[(PinId, PinState)]) {
+        self.component.clock_falling_edge_threadless(&self.vcd)
+    }
+
     /// Send [Message::Step].
-    fn execute_step(&mut self, output_changes: &mut Vec<(PinId, PinState)>) -> bool {
-        self.component.execute_step_threadless(&self.vcd, output_changes)
+    fn execute_step(&mut self) -> (bool, &[(PinId, PinState)]) {
+        self.component.execute_step_threadless(&self.vcd)
     }
 }
 
@@ -175,6 +199,9 @@ pub struct Board {
 
     changed_components: Vec<bool>,
 
+    clocked_components: Vec<bool>,
+    clock_pin: PinState,
+
     /// A VCD file writer.
     vcd_writer: VcdWriter,
 }
@@ -201,20 +228,16 @@ impl Board {
     /// `freq` is the clock frequency in Hz.
     pub fn new(vcd_path: &str, freq: f64) -> Board {
         let (output_tx, output_rx) = kanal::unbounded();
-        let clock_pin = Pin {
-            id: 0,
-            component: None,
-            wire: None,
-            out_state: PinState::Low,
-        };
         Board {
             output_rx: Some(output_rx),
             output_tx: Some(output_tx),
             components: Vec::new(),
-            pins: vec![clock_pin],
+            pins: Vec::new(),
             wires: Vec::new(),
             pin_mapping: Vec::new(),
             changed_components: Vec::new(),
+            clocked_components: Vec::new(),
+            clock_pin: PinState::Low,
             
             vcd_writer: VcdWriter::new(vcd_path, freq),
         }
@@ -268,6 +291,7 @@ impl Board {
         }
         self.components.push(ComponentData::Threaded(c));
         self.changed_components.push(true);
+        self.clocked_components.push(false);
         
         ComponentHandle {
             id: component_id,
@@ -298,6 +322,7 @@ impl Board {
 
         self.components.push(ComponentData::Threadless(c));
         self.changed_components.push(true);
+        self.clocked_components.push(false);
 
         ComponentHandle {
             id: component_id,
@@ -337,23 +362,8 @@ impl Board {
     /// Adds a new clock wire to the board, connecting specified pins.
     /// 
     /// It is automatically connected to the internal clock pin.
-    pub fn add_clock_wire(&mut self, pins: &[(ComponentId, PinId)]) -> WireId {
-        let wire_id = self.add_wire(pins);
-        self.wires[wire_id.0].pins.push(0);
-        self.pins[0].wire = Some(wire_id);
-        self.wires[wire_id.0].counter.add(self.pins[0].out_state);
-
-        let wire_state = self.wires[wire_id.0].read();
-        for &(ComponentId(component_id), pin_id) in pins {
-            match &mut self.components[component_id] {
-                ComponentData::Threaded(c) =>
-                    c.notify_on_pin_change(pin_id, wire_state),
-                ComponentData::Threadless(c) =>
-                    c.set_pin(pin_id, wire_state),
-            }
-        }
-
-        wire_id
+    pub fn add_clock_wire(&mut self, component: &ComponentHandle) {
+        self.clocked_components[component.id.0] = true;
     }
 
     /// Set a new pin state and propagate the updates through wires.
@@ -424,7 +434,10 @@ impl Board {
         loop {
             for m in &mut output_rx {
                 match m {
-                    Message::Step | Message::Die => {}
+                    Message::Step |
+                    Message::ClockFalling |
+                    Message::ClockRising |
+                    Message::Die => panic!("This shouldn't happen"),
                     Message::Done(component_id, vcd_changed) => {
                         done_counter -= 1;
                         if vcd_changed {
@@ -445,22 +458,39 @@ impl Board {
     /// Toggle a clock pin once.
     /// 
     /// Returns whether VCD has changed.
-    pub fn toggle_clock(&mut self, output_changes: &mut Vec<(PinId, PinState)>, global_output_changes: &mut Vec<(PinIndex, PinState)>) {
-        const CLOCK_PIN: PinIndex = 0;
-        if self.pins[CLOCK_PIN].out_state == PinState::High {
-            self.set_pin(CLOCK_PIN, PinState::Low);
+    #[inline]
+    fn toggle_clock(&mut self, global_output_changes: &mut Vec<(PinIndex, PinState)>) {
+        if self.clock_pin == PinState::High {
+            self.clock_pin = PinState::Low;
         } else {
-            self.set_pin(CLOCK_PIN, PinState::High);
+            self.clock_pin = PinState::High;
         }
         global_output_changes.clear();
         for (component_id, c) in self.components.iter_mut().enumerate() {
-            if !self.changed_components[component_id] {continue;}
+            if !self.changed_components[component_id] &&
+               !self.clocked_components[component_id] {continue;}
             match c {
-                ComponentData::Threaded(c) => c.notify_step(),
+                ComponentData::Threaded(c) => {
+                    if self.clocked_components[component_id] {
+                        if self.clock_pin == PinState::High {
+                            c.notify_clock_rising_edge()
+                        } else {
+                            c.notify_clock_falling_edge()
+                        }
+                    } else {
+                        c.notify_step()
+                    }
+                }
                 ComponentData::Threadless(c) => {
-
-                    output_changes.clear();
-                    let vcd_changed = c.execute_step(output_changes);
+                    let (vcd_changed, output_changes) = if self.clocked_components[component_id] {
+                        if self.clock_pin == PinState::High {
+                            c.clock_rising_edge()
+                        } else {
+                            c.clock_falling_edge()
+                        }
+                    } else {
+                        c.execute_step()
+                    };
                     if vcd_changed {
                         self.vcd_writer.set_change(component_id);
                     }
@@ -500,15 +530,12 @@ impl Board {
                 ProgressBar::new(cycles / 1_000_000)
             };
         
-        let mut output_changes = Vec::new();
         let mut global_output_changes = Vec::new();
 
-        for i in 0..cycles {
-            self.toggle_clock(&mut output_changes, &mut global_output_changes);
+        for i in 0..cycles*2 {
+            self.toggle_clock(&mut global_output_changes);
             self.vcd_writer.write_step();
-            self.toggle_clock(&mut output_changes, &mut global_output_changes);
-            self.vcd_writer.write_step();
-            if (i+1) % 1_000_000 == 0 {
+            if (i+1) % 2_000_000 == 0 {
                 progress.inc(1);
             }
         }

@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 
 use bitfield::Bit;
 
-use crate::pins::{PinState, PinStateConvertible};
+use crate::pins::PinState;
 use crate::vcd::{VcdFiller, VcdTreeModule, VcdModuleBuilder};
 
 use super::{regfile::RegisterFile, mcu_model::McuModel, io_controller::{IoController, IoControllerTrait}, sreg::StatusRegister, bit_helpers::bit_field_combined};

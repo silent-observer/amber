@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::vcd::{VcdFiller, VcdConfig, VcdTree};
 use crate::pins::{PinId, PinState};
 use crate::component::Component;
@@ -70,23 +68,27 @@ where
         IoController::<M>::pin_count()
     }
 
-    fn advance(&mut self) {
-        self.mcu.io.advance();
-        if self.mcu.io.is_clock_rising() {
-            self.tick()
-        }
-    }
+    fn advance(&mut self) {}
 
     fn set_pin(&mut self, pin: PinId, state: PinState) {
         self.mcu.io.set_pin(pin, state)
     }
 
-    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>) {
-        self.mcu.io.fill_output_changes(changes)
+    fn get_output_changes(&mut self) -> &[(PinId, PinState)] {
+        self.mcu.io.get_output_changes()
     }
 
     fn pin_name(pin: PinId) -> String {
         Io::pin_name(pin)
+    }
+
+    fn clock_rising_edge(&mut self) {
+        self.mcu.io.clock_rising_edge();
+        self.tick();
+    }
+
+    fn clock_falling_edge(&mut self) {
+        self.mcu.io.clock_falling_edge();
     }
 }
 

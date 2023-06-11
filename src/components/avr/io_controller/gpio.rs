@@ -33,14 +33,6 @@ impl GpioPort {
         assert!(pin < 8);
         self.input_states[pin as usize] = state.read();
     }
-    #[inline]
-    pub fn get_output_changes(&self) -> &[(PinId, PinState)] {
-        &self.output_changes
-    }
-    #[inline]
-    pub fn reset_pins(&mut self) {
-        self.output_changes.clear()
-    }
 
     #[inline]
     pub fn read_port(&self) -> u8 {
@@ -75,7 +67,8 @@ impl GpioPort {
         }
     }
 
-    fn update_outputs(&mut self) {
+    fn update_outputs(&mut self) -> &[(PinId, PinState)] {
+        self.output_changes.clear();
         for i in 0..8 {
             let port = self.port_register.bit(i);
             let dd = self.ddr_register.bit(i);
@@ -86,26 +79,27 @@ impl GpioPort {
                 (true, true) => self.set_output_state(i, PinState::High),
             }
         }
+        &self.output_changes
     }
 
     #[inline]
-    pub fn write_port(&mut self, val: u8) {
+    pub fn write_port(&mut self, val: u8) -> &[(PinId, PinState)] {
         self.port_register = val;
-        self.update_outputs();
+        self.update_outputs()
     }
 
     #[inline]
-    pub fn write_ddr(&mut self, val: u8) {
+    pub fn write_ddr(&mut self, val: u8) -> &[(PinId, PinState)] {
         self.ddr_register = val;
-        self.update_outputs();
+        self.update_outputs()
     }
 
-    pub fn write_pin(&mut self, val: u8) {
+    pub fn write_pin(&mut self, val: u8) -> &[(PinId, PinState)] {
         for i in 0..8 {
             if val.bit(i) {
                 self.port_register ^= 1 << i;
             }
         }
-        self.update_outputs();
+        self.update_outputs()
     }
 }

@@ -1,6 +1,5 @@
 mod gpio;
 
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use mockall::*;
 
@@ -23,7 +22,9 @@ pub trait IoControllerTrait: Send {
     fn write_external_u8(&mut self, addr: u16, val: u8);
 
     /// Returns `true` if is on rising edge of the clock
-    fn is_clock_rising(&self) -> bool;
+    fn clock_rising_edge(&mut self);
+
+    fn clock_falling_edge(&mut self);
     // Get current clock pin value
     fn clock_pin(&self) -> PinState;
 
@@ -34,18 +35,15 @@ pub trait IoControllerTrait: Send {
     /// Set input pin value
     fn set_pin(&mut self, pin: PinId, state: PinState);
     /// Get output pin changes (by filling a [HashMap])
-    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>);
-    /// Advance the simulation through one step.
-    /// 
-    /// After this step all the pin value changes must be accounted for.
-    fn advance(&mut self);
+    fn get_output_changes(&mut self) -> &[(PinId, PinState)];
 }
 
 /// Main implementation for [IoControllerTrait]
 pub struct IoController<M: McuModel> {
     model: PhantomData<M>,
     clock_pin: PinState,
-    is_clock_rising: bool,
+
+    output_changes: Vec<(PinId, PinState)>,
 
     gpio: [GpioPort; 11]
 }
@@ -54,112 +52,118 @@ impl<M: McuModel + 'static> IoController<M>{
     pub fn new() -> IoController<M> {
         IoController { 
             model: PhantomData,
-            clock_pin: PinState::Z,
-            is_clock_rising: false,
+            clock_pin: PinState::Low,
             gpio: std::array::from_fn(|_| GpioPort::new()),
+            output_changes: Vec::with_capacity(8),
         }
     }
 }
 
 impl<M: McuModel> IoController<M> {
-    const PIN_CLK: PinId = 0;
+    const _PIN_PA0: PinId = 0;
+    const _PIN_PA1: PinId = 1;
+    const _PIN_PA2: PinId = 2;
+    const _PIN_PA3: PinId = 3;
+    const _PIN_PA4: PinId = 4;
+    const _PIN_PA5: PinId = 5;
+    const _PIN_PA6: PinId = 6;
+    const _PIN_PA7: PinId = 7;
 
-    const _PIN_PA0: PinId = 1;
-    const _PIN_PA1: PinId = 2;
-    const _PIN_PA2: PinId = 3;
-    const _PIN_PA3: PinId = 4;
-    const _PIN_PA4: PinId = 5;
-    const _PIN_PA5: PinId = 6;
-    const _PIN_PA6: PinId = 7;
-    const _PIN_PA7: PinId = 8;
+    const _PIN_PB0: PinId = 1*8 + 0;
+    const _PIN_PB1: PinId = 1*8 + 1;
+    const _PIN_PB2: PinId = 1*8 + 2;
+    const _PIN_PB3: PinId = 1*8 + 3;
+    const _PIN_PB4: PinId = 1*8 + 4;
+    const _PIN_PB5: PinId = 1*8 + 5;
+    const _PIN_PB6: PinId = 1*8 + 6;
+    const _PIN_PB7: PinId = 1*8 + 7;
 
-    const _PIN_PB0: PinId = 1*8 + 1;
-    const _PIN_PB1: PinId = 1*8 + 2;
-    const _PIN_PB2: PinId = 1*8 + 3;
-    const _PIN_PB3: PinId = 1*8 + 4;
-    const _PIN_PB4: PinId = 1*8 + 5;
-    const _PIN_PB5: PinId = 1*8 + 6;
-    const _PIN_PB6: PinId = 1*8 + 7;
-    const _PIN_PB7: PinId = 1*8 + 8;
+    const _PIN_PC0: PinId = 2*8 + 0;
+    const _PIN_PC1: PinId = 2*8 + 1;
+    const _PIN_PC2: PinId = 2*8 + 2;
+    const _PIN_PC3: PinId = 2*8 + 3;
+    const _PIN_PC4: PinId = 2*8 + 4;
+    const _PIN_PC5: PinId = 2*8 + 5;
+    const _PIN_PC6: PinId = 2*8 + 6;
+    const _PIN_PC7: PinId = 2*8 + 7;
 
-    const _PIN_PC0: PinId = 2*8 + 1;
-    const _PIN_PC1: PinId = 2*8 + 2;
-    const _PIN_PC2: PinId = 2*8 + 3;
-    const _PIN_PC3: PinId = 2*8 + 4;
-    const _PIN_PC4: PinId = 2*8 + 5;
-    const _PIN_PC5: PinId = 2*8 + 6;
-    const _PIN_PC6: PinId = 2*8 + 7;
-    const _PIN_PC7: PinId = 2*8 + 8;
+    const _PIN_PD0: PinId = 3*8 + 0;
+    const _PIN_PD1: PinId = 3*8 + 1;
+    const _PIN_PD2: PinId = 3*8 + 2;
+    const _PIN_PD3: PinId = 3*8 + 3;
+    const _PIN_PD4: PinId = 3*8 + 4;
+    const _PIN_PD5: PinId = 3*8 + 5;
+    const _PIN_PD6: PinId = 3*8 + 6;
+    const _PIN_PD7: PinId = 3*8 + 7;
 
-    const _PIN_PD0: PinId = 3*8 + 1;
-    const _PIN_PD1: PinId = 3*8 + 2;
-    const _PIN_PD2: PinId = 3*8 + 3;
-    const _PIN_PD3: PinId = 3*8 + 4;
-    const _PIN_PD4: PinId = 3*8 + 5;
-    const _PIN_PD5: PinId = 3*8 + 6;
-    const _PIN_PD6: PinId = 3*8 + 7;
-    const _PIN_PD7: PinId = 3*8 + 8;
+    const _PIN_PE0: PinId = 4*8 + 0;
+    const _PIN_PE1: PinId = 4*8 + 1;
+    const _PIN_PE2: PinId = 4*8 + 2;
+    const _PIN_PE3: PinId = 4*8 + 3;
+    const _PIN_PE4: PinId = 4*8 + 4;
+    const _PIN_PE5: PinId = 4*8 + 5;
+    const _PIN_PE6: PinId = 4*8 + 6;
+    const _PIN_PE7: PinId = 4*8 + 7;
 
-    const _PIN_PE0: PinId = 4*8 + 1;
-    const _PIN_PE1: PinId = 4*8 + 2;
-    const _PIN_PE2: PinId = 4*8 + 3;
-    const _PIN_PE3: PinId = 4*8 + 4;
-    const _PIN_PE4: PinId = 4*8 + 5;
-    const _PIN_PE5: PinId = 4*8 + 6;
-    const _PIN_PE6: PinId = 4*8 + 7;
-    const _PIN_PE7: PinId = 4*8 + 8;
+    const _PIN_PF0: PinId = 5*8 + 0;
+    const _PIN_PF1: PinId = 5*8 + 1;
+    const _PIN_PF2: PinId = 5*8 + 2;
+    const _PIN_PF3: PinId = 5*8 + 3;
+    const _PIN_PF4: PinId = 5*8 + 4;
+    const _PIN_PF5: PinId = 5*8 + 5;
+    const _PIN_PF6: PinId = 5*8 + 6;
+    const _PIN_PF7: PinId = 5*8 + 7;
 
-    const _PIN_PF0: PinId = 5*8 + 1;
-    const _PIN_PF1: PinId = 5*8 + 2;
-    const _PIN_PF2: PinId = 5*8 + 3;
-    const _PIN_PF3: PinId = 5*8 + 4;
-    const _PIN_PF4: PinId = 5*8 + 5;
-    const _PIN_PF5: PinId = 5*8 + 6;
-    const _PIN_PF6: PinId = 5*8 + 7;
-    const _PIN_PF7: PinId = 5*8 + 8;
+    const _PIN_PG0: PinId = 6*8 + 0;
+    const _PIN_PG1: PinId = 6*8 + 1;
+    const _PIN_PG2: PinId = 6*8 + 2;
+    const _PIN_PG3: PinId = 6*8 + 3;
+    const _PIN_PG4: PinId = 6*8 + 4;
+    const _PIN_PG5: PinId = 6*8 + 5;
 
-    const _PIN_PG0: PinId = 6*8 + 1;
-    const _PIN_PG1: PinId = 6*8 + 2;
-    const _PIN_PG2: PinId = 6*8 + 3;
-    const _PIN_PG3: PinId = 6*8 + 4;
-    const _PIN_PG4: PinId = 6*8 + 5;
-    const _PIN_PG5: PinId = 6*8 + 6;
+    const _PIN_PH0: PinId = 6*8 + 6 + 0;
+    const _PIN_PH1: PinId = 6*8 + 6 + 1;
+    const _PIN_PH2: PinId = 6*8 + 6 + 2;
+    const _PIN_PH3: PinId = 6*8 + 6 + 3;
+    const _PIN_PH4: PinId = 6*8 + 6 + 4;
+    const _PIN_PH5: PinId = 6*8 + 6 + 5;
+    const _PIN_PH6: PinId = 6*8 + 6 + 6;
+    const _PIN_PH7: PinId = 6*8 + 6 + 7;
 
-    const _PIN_PH0: PinId = 6*8 + 6 + 1;
-    const _PIN_PH1: PinId = 6*8 + 6 + 2;
-    const _PIN_PH2: PinId = 6*8 + 6 + 3;
-    const _PIN_PH3: PinId = 6*8 + 6 + 4;
-    const _PIN_PH4: PinId = 6*8 + 6 + 5;
-    const _PIN_PH5: PinId = 6*8 + 6 + 6;
-    const _PIN_PH6: PinId = 6*8 + 6 + 7;
-    const _PIN_PH7: PinId = 6*8 + 6 + 8;
+    const _PIN_PJ0: PinId = 7*8 + 6 + 0;
+    const _PIN_PJ1: PinId = 7*8 + 6 + 1;
+    const _PIN_PJ2: PinId = 7*8 + 6 + 2;
+    const _PIN_PJ3: PinId = 7*8 + 6 + 3;
+    const _PIN_PJ4: PinId = 7*8 + 6 + 4;
+    const _PIN_PJ5: PinId = 7*8 + 6 + 5;
+    const _PIN_PJ6: PinId = 7*8 + 6 + 6;
+    const _PIN_PJ7: PinId = 7*8 + 6 + 7;
 
-    const _PIN_PJ0: PinId = 7*8 + 6 + 1;
-    const _PIN_PJ1: PinId = 7*8 + 6 + 2;
-    const _PIN_PJ2: PinId = 7*8 + 6 + 3;
-    const _PIN_PJ3: PinId = 7*8 + 6 + 4;
-    const _PIN_PJ4: PinId = 7*8 + 6 + 5;
-    const _PIN_PJ5: PinId = 7*8 + 6 + 6;
-    const _PIN_PJ6: PinId = 7*8 + 6 + 7;
-    const _PIN_PJ7: PinId = 7*8 + 6 + 8;
+    const _PIN_PK0: PinId = 8*8 + 6 + 0;
+    const _PIN_PK1: PinId = 8*8 + 6 + 1;
+    const _PIN_PK2: PinId = 8*8 + 6 + 2;
+    const _PIN_PK3: PinId = 8*8 + 6 + 3;
+    const _PIN_PK4: PinId = 8*8 + 6 + 4;
+    const _PIN_PK5: PinId = 8*8 + 6 + 5;
+    const _PIN_PK6: PinId = 8*8 + 6 + 6;
+    const _PIN_PK7: PinId = 8*8 + 6 + 7;
 
-    const _PIN_PK0: PinId = 8*8 + 6 + 1;
-    const _PIN_PK1: PinId = 8*8 + 6 + 2;
-    const _PIN_PK2: PinId = 8*8 + 6 + 3;
-    const _PIN_PK3: PinId = 8*8 + 6 + 4;
-    const _PIN_PK4: PinId = 8*8 + 6 + 5;
-    const _PIN_PK5: PinId = 8*8 + 6 + 6;
-    const _PIN_PK6: PinId = 8*8 + 6 + 7;
-    const _PIN_PK7: PinId = 8*8 + 6 + 8;
+    const _PIN_PL0: PinId = 9*8 + 6 + 0;
+    const _PIN_PL1: PinId = 9*8 + 6 + 1;
+    const _PIN_PL2: PinId = 9*8 + 6 + 2;
+    const _PIN_PL3: PinId = 9*8 + 6 + 3;
+    const _PIN_PL4: PinId = 9*8 + 6 + 4;
+    const _PIN_PL5: PinId = 9*8 + 6 + 5;
+    const _PIN_PL6: PinId = 9*8 + 6 + 6;
+    const _PIN_PL7: PinId = 9*8 + 6 + 7;
+}
 
-    const _PIN_PL0: PinId = 9*8 + 6 + 1;
-    const _PIN_PL1: PinId = 9*8 + 6 + 2;
-    const _PIN_PL2: PinId = 9*8 + 6 + 3;
-    const _PIN_PL3: PinId = 9*8 + 6 + 4;
-    const _PIN_PL4: PinId = 9*8 + 6 + 5;
-    const _PIN_PL5: PinId = 9*8 + 6 + 6;
-    const _PIN_PL6: PinId = 9*8 + 6 + 7;
-    const _PIN_PL7: PinId = 9*8 + 6 + 8;
+fn update_changes(output_changes: &mut Vec<(PinId, PinState)>, gpio_bank: usize, changes: &[(PinId, PinState)]) {
+    const GPIO_STARTS: [u16; 11] = [0, 8, 16, 24, 32, 40, 48, 54, 62, 70, 78];
+    for &(pin_index, state) in changes {
+        let pin = GPIO_STARTS[gpio_bank] + pin_index;
+        output_changes.push((pin, state));
+    }
 }
 
 impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
@@ -218,105 +222,102 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
     }
 
     fn write_internal_u8(&mut self, id: u8, val: u8) {
-        match id {
-            0x00 => self.gpio[0].write_pin(val), // PINA
-            0x01 => self.gpio[0].write_ddr(val), // DDRA
-            0x02 => self.gpio[0].write_port(val), // PORTA
+        const EMPTY: &[(PinId, PinState)] = &[];
+        let (gpio_bank, changes) = match id {
+            0x00 => (0, self.gpio[0].write_pin(val)), // PINA
+            0x01 => (0, self.gpio[0].write_ddr(val)), // DDRA
+            0x02 => (0, self.gpio[0].write_port(val)), // PORTA
 
-            0x03 => self.gpio[1].write_pin(val), // PINB
-            0x04 => self.gpio[1].write_ddr(val), // DDRB
-            0x05 => self.gpio[1].write_port(val), // PORTB
+            0x03 => (1, self.gpio[1].write_pin(val)), // PINB
+            0x04 => (1, self.gpio[1].write_ddr(val)), // DDRB
+            0x05 => (1, self.gpio[1].write_port(val)), // PORTB
 
-            0x06 => self.gpio[2].write_pin(val), // PINC
-            0x07 => self.gpio[2].write_ddr(val), // DDRC
-            0x08 => self.gpio[2].write_port(val), // PORTC
+            0x06 => (2, self.gpio[2].write_pin(val)), // PINC
+            0x07 => (2, self.gpio[2].write_ddr(val)), // DDRC
+            0x08 => (2, self.gpio[2].write_port(val)), // PORTC
 
-            0x09 => self.gpio[3].write_pin(val), // PIND
-            0x0A => self.gpio[3].write_ddr(val), // DDRD
-            0x0B => self.gpio[3].write_port(val), // PORTD
+            0x09 => (3, self.gpio[3].write_pin(val)), // PIND
+            0x0A => (3, self.gpio[3].write_ddr(val)), // DDRD
+            0x0B => (3, self.gpio[3].write_port(val)), // PORTD
 
-            0x0C => self.gpio[4].write_pin(val), // PINE
-            0x0D => self.gpio[4].write_ddr(val), // DDRE
-            0x0E => self.gpio[4].write_port(val), // PORTE
+            0x0C => (4, self.gpio[4].write_pin(val)), // PINE
+            0x0D => (4, self.gpio[4].write_ddr(val)), // DDRE
+            0x0E => (4, self.gpio[4].write_port(val)), // PORTE
 
-            0x0F => self.gpio[5].write_pin(val), // PINF
-            0x10 => self.gpio[5].write_ddr(val), // DDRF
-            0x11 => self.gpio[5].write_port(val), // PORTF
+            0x0F => (5, self.gpio[5].write_pin(val)), // PINF
+            0x10 => (5, self.gpio[5].write_ddr(val)), // DDRF
+            0x11 => (5, self.gpio[5].write_port(val)), // PORTF
 
-            0x12 => self.gpio[6].write_pin(val), // PING
-            0x13 => self.gpio[6].write_ddr(val), // DDRG
-            0x14 => self.gpio[6].write_port(val), // PORTG
-            _ => {}
-        }
+            0x12 => (6, self.gpio[6].write_pin(val)), // PING
+            0x13 => (6, self.gpio[6].write_ddr(val)), // DDRG
+            0x14 => (6, self.gpio[6].write_port(val)), // PORTG
+            _ => {(0, EMPTY)}
+        };
+        update_changes(&mut self.output_changes, gpio_bank, changes)
     }
 
     fn write_external_u8(&mut self, addr: u16, val: u8) {
-        match addr {
-            0x100 => self.gpio[7].write_pin(val), // PINH
-            0x101 => self.gpio[7].write_ddr(val), // DDRH
-            0x102 => self.gpio[7].write_port(val), // PORTH
+        const EMPTY: &[(PinId, PinState)] = &[];
+        let (gpio_bank, changes) = match addr {
+            0x100 => (7, self.gpio[7].write_pin(val)), // PINH
+            0x101 => (7, self.gpio[7].write_ddr(val)), // DDRH
+            0x102 => (7, self.gpio[7].write_port(val)), // PORTH
 
-            0x103 => self.gpio[8].write_pin(val), // PINJ
-            0x104 => self.gpio[8].write_ddr(val), // DDRJ
-            0x105 => self.gpio[8].write_port(val), // PORTJ
+            0x103 => (8, self.gpio[8].write_pin(val)), // PINJ
+            0x104 => (8, self.gpio[8].write_ddr(val)), // DDRJ
+            0x105 => (8, self.gpio[8].write_port(val)), // PORTJ
 
-            0x106 => self.gpio[9].write_pin(val), // PINK
-            0x107 => self.gpio[9].write_ddr(val), // DDRK
-            0x108 => self.gpio[9].write_port(val), // PORTK
+            0x106 => (9, self.gpio[9].write_pin(val)), // PINK
+            0x107 => (9, self.gpio[9].write_ddr(val)), // DDRK
+            0x108 => (9, self.gpio[9].write_port(val)), // PORTK
 
-            0x109 => self.gpio[10].write_pin(val), // PINL
-            0x10A => self.gpio[10].write_ddr(val), // DDRL
-            0x10B => self.gpio[10].write_port(val), // PORTL
-            _ => {}
-        }
+            0x109 => (10, self.gpio[10].write_pin(val)), // PINL
+            0x10A => (10, self.gpio[10].write_ddr(val)), // DDRL
+            0x10B => (10, self.gpio[10].write_port(val)), // PORTL
+            _ => {(0, EMPTY)}
+        };
+        update_changes(&mut self.output_changes, gpio_bank, changes)
     }
 
     fn set_pin(&mut self, pin: PinId, state: PinState) {
-        if pin == Self::PIN_CLK {
-            self.is_clock_rising = self.clock_pin == PinState::Low && state == PinState::High;
-            self.clock_pin = state;
-        }
-        else if pin < 1 + 86 {
-            let (gpio_bank, gpio_index) = match pin {
-                1 ..=8  => (0, pin - 1),
-                9 ..=16 => (1, pin - 9),
-                17..=24 => (2, pin - 17),
-                25..=32 => (3, pin - 25),
-                33..=40 => (4, pin - 33),
-                41..=48 => (5, pin - 41),
-                49..=54 => (6, pin - 49),
-                55..=62 => (7, pin - 55),
-                63..=70 => (8, pin - 63),
-                71..=78 => (9, pin - 71),
-                79..=86 => (10, pin - 79),
-                _ => panic!("Invalid pin number")
-            };
-            self.gpio[gpio_bank as usize].set_input_pin(gpio_index, state);
-        }
+        let (gpio_bank, gpio_index) = match pin {
+            0 ..=7  => (0, pin - 0),
+            8 ..=15 => (1, pin - 8),
+            16..=23 => (2, pin - 16),
+            24..=31 => (3, pin - 24),
+            32..=39 => (4, pin - 32),
+            40..=47 => (5, pin - 40),
+            48..=53 => (6, pin - 48),
+            54..=61 => (7, pin - 54),
+            62..=69 => (8, pin - 62),
+            70..=77 => (9, pin - 70),
+            78..=85 => (10, pin - 78),
+            _ => panic!("Invalid pin number")
+        };
+        self.gpio[gpio_bank as usize].set_input_pin(gpio_index, state);
     }
 
     fn pin_count() -> usize {
-        1 + 86
+        86
     }
 
     fn pin_name(pin: PinId) -> String {
         match pin {
-            0 => "CLK".to_string(),
-            1..=86 => {
+            0..=85 => {
                 let mut s = String::with_capacity(3);
                 s.push('P');
                 let (port, i) = match pin {
-                    1 ..=8  => ('A', pin - 1),
-                    9 ..=16 => ('B', pin - 9),
-                    17..=24 => ('C', pin - 17),
-                    25..=32 => ('D', pin - 25),
-                    33..=40 => ('E', pin - 33),
-                    41..=48 => ('F', pin - 41),
-                    49..=54 => ('G', pin - 49),
-                    55..=62 => ('H', pin - 55),
-                    63..=70 => ('J', pin - 63),
-                    71..=78 => ('K', pin - 71),
-                    79..=86 => ('L', pin - 79),
+                    0 ..=7  => ('A', pin - 0),
+                    8 ..=15 => ('B', pin - 8),
+                    16..=23 => ('C', pin - 16),
+                    24..=31 => ('D', pin - 24),
+                    32..=39 => ('E', pin - 32),
+                    40..=47 => ('F', pin - 40),
+                    48..=53 => ('G', pin - 48),
+                    54..=61 => ('H', pin - 54),
+                    62..=69 => ('J', pin - 62),
+                    70..=77 => ('K', pin - 70),
+                    78..=85 => ('L', pin - 78),
                     _ => panic!("Invalid pin number")
                 };
                 s.push(port);
@@ -326,35 +327,25 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             _ => panic!("Invalid pin number")
         }
     }
-
-    #[inline]
-    fn is_clock_rising(&self) -> bool {
-        self.is_clock_rising
-    }
+    
     #[inline]
     fn clock_pin(&self) -> PinState {
         self.clock_pin
     }
 
-    fn fill_output_changes(&mut self, changes: &mut Vec<(PinId, PinState)>) {
-        const GPIO_STARTS: [u16; 11] = [1, 9, 17, 25, 33, 41, 49, 55, 63, 71, 79];
-        for (gpio_bank,     bank) in self.gpio.iter_mut().enumerate() {
-            if bank.changed {
-                for &(pin_index, state) in bank.get_output_changes() {
-                    let pin = GPIO_STARTS[gpio_bank] + pin_index;
-                    changes.push((pin, state));
-                }
-                bank.reset_pins();
-                bank.changed = false;
-            }
-        }
+    fn get_output_changes(&mut self) -> &[(PinId, PinState)] {
+        &self.output_changes
     }
 
-    fn advance(&mut self) {
-        if self.is_clock_rising {
-            for gpio_bank in self.gpio.iter_mut() {
-                gpio_bank.clock_rising_edge();
-            }
+    fn clock_rising_edge(&mut self) {
+        self.clock_pin = PinState::High;
+        for gpio_bank in self.gpio.iter_mut() {
+            gpio_bank.clock_rising_edge();
         }
+        self.output_changes.clear();
+    }
+
+    fn clock_falling_edge(&mut self) {
+        self.clock_pin = PinState::Low;
     }
 }

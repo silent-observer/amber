@@ -7,7 +7,7 @@ pub mod config;
 pub mod writer;
 pub mod builder;
 
-use std::{collections::HashMap, sync::{Mutex, Arc}, cell::{RefCell, Ref}, rc::Rc};
+use std::{sync::{Mutex, Arc}, cell::RefCell, rc::Rc};
 
 use crate::pins::{PinState, PinStateConvertible, PinVec};
 
