@@ -25,6 +25,7 @@ impl PinState {
     /// assert_eq!(PinState::from_bool(true), PinState::High);
     /// assert_eq!(PinState::from_bool(false), PinState::Low);
     /// ```
+    #[inline]
     pub fn from_bool(b: bool) -> PinState {
         if b {
             PinState::High
