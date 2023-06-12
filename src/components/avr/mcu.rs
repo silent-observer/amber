@@ -260,6 +260,10 @@ where
         builder.add_signal("pc", 32, PinState::Low);
         builder.add_node("regs", &self.reg_file);
         builder.add_node("sreg", &self.sreg);
+        builder.add_node("timer1", self.io.timer1());
+        builder.add_node("timer3", self.io.timer3());
+        builder.add_node("timer4", self.io.timer4());
+        builder.add_node("timer5", self.io.timer5());
     }
 
     fn fill_module(&self, module: &mut VcdTreeModule) -> bool {
@@ -267,6 +271,10 @@ where
         r |= module.update_subsignal(1, self.pc);
         r |= module.update_child(2, &self.reg_file);
         r |= module.update_child(3, &self.sreg);
+        r |= module.update_child(4, self.io.timer1());
+        r |= module.update_child(5, self.io.timer3());
+        r |= module.update_child(6, self.io.timer4());
+        r |= module.update_child(7, self.io.timer5());
         r
     }
 }

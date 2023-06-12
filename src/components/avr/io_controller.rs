@@ -40,6 +40,12 @@ pub trait IoControllerTrait: Send {
 
     fn has_interrupt(&self) -> bool;
     fn get_interrupt_address(&mut self) -> Option<u16>;
+
+    fn timer1(&self) -> &Timer16;
+    fn timer3(&self) -> &Timer16;
+    fn timer4(&self) -> &Timer16;
+    fn timer5(&self) -> &Timer16;
+    
 }
 /// Main implementation for [IoControllerTrait]
 pub struct IoController<M: McuModel> {
@@ -483,6 +489,9 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             gpio_bank.clock_rising_edge();
         }
         self.timer1.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        self.timer3.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        self.timer4.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        self.timer5.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
         self.timer_prescaler = (self.timer_prescaler + 1) % 1024;
     }
 
@@ -541,5 +550,25 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             self.interrupt = false;
         }
         result
+    }
+
+    #[inline]
+    fn timer1(&self) -> &Timer16 {
+        &self.timer1
+    }
+
+    #[inline]
+    fn timer3(&self) -> &Timer16 {
+        &self.timer3
+    }
+
+    #[inline]
+    fn timer4(&self) -> &Timer16 {
+        &self.timer4
+    }
+
+    #[inline]
+    fn timer5(&self) -> &Timer16 {
+        &self.timer5
     }
 }

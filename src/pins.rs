@@ -86,6 +86,16 @@ impl PinVec {
         }
     }
 
+    #[inline]
+    pub fn init_logical(size: u8, val: u32) -> PinVec {
+        if size == 1 {
+            PinVec::SinglePin(if val.bit(0) {PinState::High} else {PinState::Low})
+        } else {
+            PinVec::SmallLogical { size, bits: val }
+        }
+    }
+
+    #[inline]
     pub fn len(&self) -> u8 {
         match self {
             PinVec::SinglePin(_) => 1,
@@ -93,6 +103,7 @@ impl PinVec {
         }
     }
 
+    #[inline]
     pub fn iter(&self) -> PinVecIter {
         PinVecIter { vec: self, pos: self.len() as i8 - 1 }
     }

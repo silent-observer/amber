@@ -1,6 +1,6 @@
 use bitfield::Bit;
 
-use crate::pins::{PinId, PinState};
+use crate::{pins::{PinId, PinState, PinVec}, vcd::{VcdFiller, VcdModuleBuilder, VcdTreeModule}};
 
 #[allow(dead_code)]
 #[repr(u8)]
@@ -65,6 +65,7 @@ pub struct Timer16 {
     compare_output_mode: [CompareOutputMode; 3],
     pin_ids: [PinId; 3],
 
+    upcounting: bool,
     clock_mode: ClockMode,
     waveform_mode: WaveformGenerationMode,
 
@@ -82,6 +83,7 @@ impl Timer16 {
             pin_ids,
             compare_output_mode: [CompareOutputMode::Disabled; 3],
             clock_mode: ClockMode::Disabled,
+            upcounting: true,
             waveform_mode: WaveformGenerationMode::Normal,
             interrupt_masks: Timer16Interrupts { 
                 overflow: false,
@@ -127,18 +129,43 @@ impl Timer16 {
                 self.pins[i] = !self.pins[i];
                 output_changes.push((self.pin_ids[i], PinState::from_bool(self.pins[i])))
             }
-            CompareOutputMode::Clear => {
+            CompareOutputMode::Clear if self.upcounting => {
                 self.pins[i] = false;
                 output_changes.push((self.pin_ids[i], PinState::Low))
             }
-            CompareOutputMode::Set => {
+            CompareOutputMode::Clear => {
+                self.pins[i] = false;
+                output_changes.push((self.pin_ids[i], PinState::High))
+            }
+            CompareOutputMode::Set if self.upcounting => {
                 self.pins[i] = true;
                 output_changes.push((self.pin_ids[i], PinState::High))
+            }
+            CompareOutputMode::Set => {
+                self.pins[i] = true;
+                output_changes.push((self.pin_ids[i], PinState::Low))
             }
         }
         if self.interrupt_masks.oc[i] {
             self.interrupt_flags.oc[i] = true;
             *interrupt = true;
+        }
+    }
+
+    #[inline]
+    pub fn reset_oc_pwm(&mut self, i: usize, output_changes: &mut Vec<(PinId, PinState)>) {
+        // TODO: This shouldn't work with incorrect DDR
+        match self.compare_output_mode[i] {
+            CompareOutputMode::Disabled => {},
+            CompareOutputMode::Toggle => {}
+            CompareOutputMode::Clear => {
+                self.pins[i] = true;
+                output_changes.push((self.pin_ids[i], PinState::High))
+            }
+            CompareOutputMode::Set => {
+                self.pins[i] = false;
+                output_changes.push((self.pin_ids[i], PinState::Low))
+            }
         }
     }
 
@@ -159,6 +186,40 @@ impl Timer16 {
     }
 
     fn tick(&mut self, output_changes: &mut Vec<(PinId, PinState)>, interrupt: &mut bool) {
+        if self.counter == 0 {
+            match self.waveform_mode {
+                WaveformGenerationMode::FastPwm8Bit |
+                WaveformGenerationMode::FastPwm9Bit |
+                WaveformGenerationMode::FastPwm10Bit |
+                WaveformGenerationMode::FastPwmIcr |
+                WaveformGenerationMode::FastPwmOcrA => {
+                    self.active_ocr = self.reg_ocr;
+                }
+                WaveformGenerationMode::Pwm8Bit |
+                WaveformGenerationMode::Pwm9Bit |
+                WaveformGenerationMode::Pwm10Bit |
+                WaveformGenerationMode::PwmPhaseIcr |
+                WaveformGenerationMode::PwmPhaseOcrA => {
+                    self.upcounting = true;
+                    if self.interrupt_masks.overflow {
+                        self.interrupt_flags.overflow = true;
+                        *interrupt = true;
+                    }
+                }
+
+                WaveformGenerationMode::PwmPhaseFreqIcr |
+                WaveformGenerationMode::PwmPhaseFreqOcrA => {
+                    self.upcounting = true;
+                    self.active_ocr = self.reg_ocr;
+                    if self.interrupt_masks.overflow {
+                        self.interrupt_flags.overflow = true;
+                        *interrupt = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+
         for i in 0..3 {
             if self.active_ocr[i] == self.counter {
                 self.update_oc(i, output_changes, interrupt);
@@ -166,25 +227,38 @@ impl Timer16 {
         }
 
         let top = self.top_value();
-        if self.counter == top {
+        if self.counter == top && self.upcounting {
             // TODO: Proper PWM
-            self.counter = 0;
             match self.waveform_mode {
                 WaveformGenerationMode::Pwm8Bit |
                 WaveformGenerationMode::Pwm9Bit |
                 WaveformGenerationMode::Pwm10Bit |
                 WaveformGenerationMode::PwmPhaseIcr |
-                WaveformGenerationMode::PwmPhaseOcrA => self.active_ocr = self.reg_ocr,
+                WaveformGenerationMode::PwmPhaseOcrA => {
+                    self.upcounting = false;
+                    self.active_ocr = self.reg_ocr;
+                }
+
+                WaveformGenerationMode::PwmPhaseFreqIcr |
+                WaveformGenerationMode::PwmPhaseFreqOcrA => {
+                    self.upcounting = false;
+                }
 
                 WaveformGenerationMode::FastPwm8Bit |
                 WaveformGenerationMode::FastPwm9Bit |
                 WaveformGenerationMode::FastPwm10Bit |
                 WaveformGenerationMode::FastPwmIcr |
-                WaveformGenerationMode::FastPwmOcrA if self.interrupt_masks.overflow => {
-                    self.interrupt_flags.overflow = true;
-                    *interrupt = true;
+                WaveformGenerationMode::FastPwmOcrA => {
+                    self.counter = 0;
+                    if self.interrupt_masks.overflow {
+                        self.interrupt_flags.overflow = true;
+                        *interrupt = true;
+                    }
+                    for i in 0..3 {
+                        self.reset_oc_pwm(i, output_changes);
+                    }
                 }
-                _ => {}
+                _ => self.counter = 0,
             }
         } else {
             if self.counter == 0xFFFF && self.interrupt_masks.overflow {
@@ -198,7 +272,11 @@ impl Timer16 {
                     _ => {}
                 }
             }
-            self.counter = self.counter.wrapping_add(1);
+            if self.upcounting {
+                self.counter = self.counter.wrapping_add(1);
+            } else {
+                self.counter = self.counter.wrapping_sub(1);
+            }
         }
     }
 
@@ -293,6 +371,7 @@ impl Timer16 {
             self.waveform_mode = std::mem::transmute(self.waveform_mode as u8 & 0x3 | (val & 0x18) >> 1);
             self.clock_mode = std::mem::transmute(val & 0x7);
         }
+        self.upcounting = true;
     }
 
     #[inline]
@@ -393,5 +472,39 @@ impl Timer16 {
         if val.bit(0) {
             self.interrupt_flags.overflow = false;
         }
+    }
+}
+
+impl VcdFiller for Timer16 {
+    const IS_SIGNAL: bool = false;
+    
+    fn init_vcd_module(&self, builder: &mut VcdModuleBuilder) {
+        builder.add_signal("counter", 16, PinState::Low);
+        builder.add_signal("ocra", 16, PinState::Low);
+        builder.add_signal("ocrb", 16, PinState::Low);
+        builder.add_signal("ocrc", 16, PinState::Low);
+        builder.add_signal("coma", 2, PinState::Low);
+        builder.add_signal("comb", 2, PinState::Low);
+        builder.add_signal("comc", 2, PinState::Low);
+        builder.add_signal("wgm", 4, PinState::Low);
+        builder.add_signal("cs", 3, PinState::Low);
+    }
+
+    fn fill_module(&self, module: &mut VcdTreeModule) -> bool {
+        let mut r = module.update_subsignal(0, self.counter);
+        r |= module.update_subsignal(1, self.active_ocr[0]);
+        r |= module.update_subsignal(2, self.active_ocr[1]);
+        r |= module.update_subsignal(3, self.active_ocr[2]);
+        r |= module.update_subsignal(4,
+            PinVec::init_logical(2, self.compare_output_mode[0] as u32));
+        r |= module.update_subsignal(5,
+            PinVec::init_logical(2, self.compare_output_mode[1] as u32));
+        r |= module.update_subsignal(6,
+            PinVec::init_logical(2, self.compare_output_mode[2] as u32));
+        r |= module.update_subsignal(7,
+            PinVec::init_logical(4, self.waveform_mode as u32));
+        r |= module.update_subsignal(8,
+            PinVec::init_logical(3, self.clock_mode as u32));
+        r
     }
 }
