@@ -6,7 +6,7 @@ extern crate timeit;
 fn main() {
     let mut board = Board::new("out.vcd", 16e6);
     let mut mcu = Atmega2560::new();
-    mcu.load_flash_hex("hex/blink_pwm.hex");
+    mcu.load_flash_hex("hex/uart_test.hex");
 
     let mcu = board.add_component_threadless(
         mcu, "mcu", 
@@ -15,24 +15,23 @@ fn main() {
             // clk
             // regs
             // pc
-            timer1: {
-                counter
-                ocrc
-            }
-            timer3: {
-                counter
-                ocra
-            }
         });
     board.add_clock_wire(&mcu);
 
-    let led = Led::new();
-    let led = board.add_component(
-        led, "led", 
+    let xck_led = Led::new();
+    let xck_led = board.add_component(
+        xck_led, "xck_led", 
         &VcdConfig::Enable);
-    board.add_wire(&[mcu.pin("PB7"), led.pin("LED")]);
+
+    let tx_led = Led::new();
+    let tx_led = board.add_component(
+        tx_led, "tx_led", 
+        &VcdConfig::Enable);
+
+    board.add_wire(&[mcu.pin("PE2"), xck_led.pin("LED")]);
+    board.add_wire(&[mcu.pin("PE1"), tx_led.pin("LED")]);
 
     timeit_loops!(1, {
-        board.simulate(16000000 / 10);
+        board.simulate(16000000);
     });
 }

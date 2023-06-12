@@ -1,12 +1,13 @@
 mod gpio;
 mod timer16;
+mod uart;
 
 use std::marker::PhantomData;
 use mockall::*;
 
 use crate::pins::{PinId, PinState};
 
-use self::{gpio::GpioPort, timer16::Timer16};
+use self::{gpio::GpioPort, timer16::Timer16, uart::Uart};
 
 use super::mcu_model::McuModel;
 
@@ -64,6 +65,8 @@ pub struct IoController<M: McuModel> {
     timer4: Timer16,
     timer5: Timer16,
 
+    uart0: Uart,
+
     gpio_pins: [(bool, PinState); 86],
 }
 
@@ -81,6 +84,7 @@ impl<M: McuModel + 'static> IoController<M>{
             timer3: Timer16::new([Self::PIN_PE3, Self::PIN_PE4, Self::PIN_PE5]),
             timer4: Timer16::new([Self::PIN_PH3, Self::PIN_PH4, Self::PIN_PH5]),
             timer5: Timer16::new([Self::PIN_PL3, Self::PIN_PL4, Self::PIN_PL5]),
+            uart0: Uart::new(Self::PIN_PE2, Self::PIN_PE1),
         }
     }
 }
@@ -123,8 +127,8 @@ impl<M: McuModel> IoController<M> {
     const _PIN_PD7: PinId = 3*8 + 7;
 
     const _PIN_PE0: PinId = 4*8 + 0;
-    const _PIN_PE1: PinId = 4*8 + 1;
-    const _PIN_PE2: PinId = 4*8 + 2;
+    const PIN_PE1: PinId = 4*8 + 1;
+    const PIN_PE2: PinId = 4*8 + 2;
     const PIN_PE3: PinId = 4*8 + 3;
     const PIN_PE4: PinId = 4*8 + 4;
     const PIN_PE5: PinId = 4*8 + 5;
@@ -277,6 +281,13 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             0x0AC => self.timer4.read_ocrcl(),
             0x0AD => self.timer4.read_ocrch(),
 
+            0x0C0 => self.uart0.read_ucsra(),
+            0x0C1 => self.uart0.read_ucsrb(),
+            0x0C2 => self.uart0.read_ucsrc(),
+            0x0C4 => self.uart0.read_ubrrl(),
+            0x0C5 => self.uart0.read_ubrrh(),
+            0x0C6 => self.uart0.read_udr(),
+
             0x100 => self.gpio[7].read_pin(), // PINH
             0x101 => self.gpio[7].read_ddr(), // DDRH
             0x102 => self.gpio[7].read_port(), // PORTH
@@ -392,6 +403,13 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             0x0AC => {self.timer4.write_ocrcl(val); (0, EMPTY)}
             0x0AD => {self.timer4.write_ocrch(val); (0, EMPTY)}
 
+            0x0C0 => {self.uart0.write_ucsra(val); (0, EMPTY)}
+            0x0C1 => {self.uart0.write_ucsrb(val, &mut self.output_changes); (0, EMPTY)}
+            0x0C2 => {self.uart0.write_ucsrc(val); (0, EMPTY)}
+            0x0C4 => {self.uart0.write_ubrrl(val); (0, EMPTY)}
+            0x0C5 => {self.uart0.write_ubrrh(val); (0, EMPTY)}
+            0x0C6 => {self.uart0.write_udr(val); (0, EMPTY)}
+
             0x100 => (7, self.gpio[7].write_pin(val)), // PINH
             0x101 => (7, self.gpio[7].write_ddr(val)), // DDRH
             0x102 => (7, self.gpio[7].write_port(val)), // PORTH
@@ -493,8 +511,11 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
         self.timer4.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
         self.timer5.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
         self.timer_prescaler = (self.timer_prescaler + 1) % 1024;
+
+        self.uart0.tick(&mut self.output_changes, &mut self.interrupt);
     }
 
+    #[inline]
     fn clock_falling_edge(&mut self) {
         self.clock_pin = PinState::Low;
     }
