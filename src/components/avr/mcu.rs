@@ -76,6 +76,12 @@ where
 
     /// Executes one instruction at PC address and returns number of cycles.
     pub fn step(&mut self) -> u8 {
+        if self.io.has_interrupt() && self.sreg.i() {
+            if let Some(addr) = self.io.get_interrupt_address() {
+                return self.execute_interrupt(addr)
+            }
+        }
+
         let opcode: u16 = self.read_at_pc_offset(0);
         self.execute(opcode)
     }

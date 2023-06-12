@@ -1,3 +1,5 @@
+use bitfield::Bit;
+
 use crate::pins::{PinId, PinState};
 
 #[allow(dead_code)]
@@ -49,6 +51,12 @@ enum WaveformGenerationMode {
     FastPwmOcrA = 15,
 }
 
+pub struct Timer16Interrupts {
+    pub overflow: bool,
+    pub oc: [bool; 3],
+    pub input_capture: bool,
+}
+
 pub struct Timer16 {
     counter: u16,
     pins: [bool; 3],
@@ -59,6 +67,9 @@ pub struct Timer16 {
 
     clock_mode: ClockMode,
     waveform_mode: WaveformGenerationMode,
+
+    interrupt_masks: Timer16Interrupts,
+    pub interrupt_flags: Timer16Interrupts,
 }
 
 impl Timer16 {
@@ -72,6 +83,16 @@ impl Timer16 {
             compare_output_mode: [CompareOutputMode::Disabled; 3],
             clock_mode: ClockMode::Disabled,
             waveform_mode: WaveformGenerationMode::Normal,
+            interrupt_masks: Timer16Interrupts { 
+                overflow: false,
+                oc: [false; 3],
+                input_capture: false
+            },
+            interrupt_flags: Timer16Interrupts { 
+                overflow: false,
+                oc: [false; 3],
+                input_capture: false
+            }
         }
     }
 
@@ -98,7 +119,8 @@ impl Timer16 {
     }
 
     #[inline]
-    pub fn update_oc(&mut self, i: usize, output_changes: &mut Vec<(PinId, PinState)>) {
+    pub fn update_oc(&mut self, i: usize, output_changes: &mut Vec<(PinId, PinState)>, interrupt: &mut bool) {
+        // TODO: This shouldn't work with incorrect DDR
         match self.compare_output_mode[i] {
             CompareOutputMode::Disabled => {},
             CompareOutputMode::Toggle => {
@@ -114,9 +136,13 @@ impl Timer16 {
                 output_changes.push((self.pin_ids[i], PinState::High))
             }
         }
+        if self.interrupt_masks.oc[i] {
+            self.interrupt_flags.oc[i] = true;
+            *interrupt = true;
+        }
     }
 
-    pub fn tick_prescaler(&mut self, prescaler: u16, output_changes: &mut Vec<(PinId, PinState)>) {
+    pub fn tick_prescaler(&mut self, prescaler: u16, output_changes: &mut Vec<(PinId, PinState)>, interrupt: &mut bool) {
         let should_tick = match self.clock_mode {
             ClockMode::Disabled => false,
             ClockMode::Clk1 => true,
@@ -128,14 +154,14 @@ impl Timer16 {
             ClockMode::ExternalRising => todo!(),
         };
         if should_tick {
-            self.tick(output_changes)
+            self.tick(output_changes, interrupt)
         }
     }
 
-    fn tick(&mut self, output_changes: &mut Vec<(PinId, PinState)>) {
+    fn tick(&mut self, output_changes: &mut Vec<(PinId, PinState)>, interrupt: &mut bool) {
         for i in 0..3 {
             if self.active_ocr[i] == self.counter {
-                self.update_oc(i, output_changes);
+                self.update_oc(i, output_changes, interrupt);
             }
         }
 
@@ -149,9 +175,29 @@ impl Timer16 {
                 WaveformGenerationMode::Pwm10Bit |
                 WaveformGenerationMode::PwmPhaseIcr |
                 WaveformGenerationMode::PwmPhaseOcrA => self.active_ocr = self.reg_ocr,
+
+                WaveformGenerationMode::FastPwm8Bit |
+                WaveformGenerationMode::FastPwm9Bit |
+                WaveformGenerationMode::FastPwm10Bit |
+                WaveformGenerationMode::FastPwmIcr |
+                WaveformGenerationMode::FastPwmOcrA if self.interrupt_masks.overflow => {
+                    self.interrupt_flags.overflow = true;
+                    *interrupt = true;
+                }
                 _ => {}
             }
         } else {
+            if self.counter == 0xFFFF && self.interrupt_masks.overflow {
+                match self.waveform_mode {
+                    WaveformGenerationMode::Normal |
+                    WaveformGenerationMode::Ctc |
+                    WaveformGenerationMode::CtcIcr => {
+                        self.interrupt_flags.overflow = true;
+                        *interrupt = true;
+                    }
+                    _ => {}
+                }
+            }
             self.counter = self.counter.wrapping_add(1);
         }
     }
@@ -203,6 +249,23 @@ impl Timer16 {
     #[inline]
     pub fn read_ocrch(&self) -> u8 {
         (self.reg_ocr[2] >> 8) as u8
+    }
+
+    #[inline]
+    pub fn read_timsk(&self) -> u8 {
+        (self.interrupt_masks.input_capture as u8) << 5 |
+        (self.interrupt_masks.oc[2] as u8) << 3 |
+        (self.interrupt_masks.oc[1] as u8) << 2 |
+        (self.interrupt_masks.oc[0] as u8) << 1 |
+        (self.interrupt_masks.overflow as u8)
+    }
+    #[inline]
+    pub fn read_tifr(&self) -> u8 {
+        (self.interrupt_flags.input_capture as u8) << 5 |
+        (self.interrupt_flags.oc[2] as u8) << 3 |
+        (self.interrupt_flags.oc[1] as u8) << 2 |
+        (self.interrupt_flags.oc[0] as u8) << 1 |
+        (self.interrupt_flags.overflow as u8)
     }
 
     #[inline]
@@ -302,6 +365,33 @@ impl Timer16 {
             WaveformGenerationMode::Ctc |
             WaveformGenerationMode::CtcIcr => self.active_ocr[2] = self.reg_ocr[2],
             _ => {}
+        }
+    }
+
+    #[inline]
+    pub fn write_timsk(&mut self, val: u8) {
+        self.interrupt_masks.input_capture = val.bit(5);
+        self.interrupt_masks.oc[2] = val.bit(3);
+        self.interrupt_masks.oc[1] = val.bit(2);
+        self.interrupt_masks.oc[0] = val.bit(1);
+        self.interrupt_masks.overflow = val.bit(0);
+    }
+    #[inline]
+    pub fn write_tifr(&mut self, val: u8) {
+        if val.bit(5) {
+            self.interrupt_flags.input_capture = false;
+        }
+        if val.bit(3) {
+            self.interrupt_flags.oc[2] = false;
+        }
+        if val.bit(2) {
+            self.interrupt_flags.oc[1] = false;
+        }
+        if val.bit(1) {
+            self.interrupt_flags.oc[0] = false;
+        }
+        if val.bit(0) {
+            self.interrupt_flags.overflow = false;
         }
     }
 }

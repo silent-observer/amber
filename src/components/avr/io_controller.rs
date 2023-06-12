@@ -37,6 +37,9 @@ pub trait IoControllerTrait: Send {
     fn set_pin(&mut self, pin: PinId, state: PinState);
     /// Get output pin changes (by filling a [HashMap])
     fn get_output_changes(&mut self) -> &[(PinId, PinState)];
+
+    fn has_interrupt(&self) -> bool;
+    fn get_interrupt_address(&mut self) -> Option<u16>;
 }
 /// Main implementation for [IoControllerTrait]
 pub struct IoController<M: McuModel> {
@@ -44,6 +47,7 @@ pub struct IoController<M: McuModel> {
     clock_pin: PinState,
 
     output_changes: Vec<(PinId, PinState)>,
+    interrupt: bool,
 
     gpio: [GpioPort; 11],
 
@@ -64,6 +68,7 @@ impl<M: McuModel + 'static> IoController<M>{
             clock_pin: PinState::Low,
             gpio: std::array::from_fn(|_| GpioPort::new()),
             output_changes: Vec::with_capacity(8),
+            interrupt: false,
             gpio_pins: [(true, PinState::Z); 86],
             timer_prescaler: 0,
             timer1: Timer16::new([Self::PIN_PB5, Self::PIN_PB6, Self::PIN_PB7]),
@@ -177,7 +182,7 @@ fn update_changes(output_changes: &mut Vec<(PinId, PinState)>, gpio_bank: usize,
     const GPIO_STARTS: [u16; 11] = [0, 8, 16, 24, 32, 40, 48, 54, 62, 70, 78];
     for &(pin_index, state) in changes {
         let pin = GPIO_STARTS[gpio_bank] + pin_index;
-        if !gpio_pins[pin as usize].0 {
+        if gpio_pins[pin as usize].0 {
             output_changes.push((pin, state));
         }
         gpio_pins[pin as usize].1 = state;
@@ -214,14 +219,25 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             0x12 => self.gpio[6].read_pin(), // PING
             0x13 => self.gpio[6].read_ddr(), // DDRG
             0x14 => self.gpio[6].read_port(), // PORTG
+
+            0x16 => self.timer1.read_tifr(),
+            0x18 => self.timer3.read_tifr(),
+            0x19 => self.timer4.read_tifr(),
+            0x1A => self.timer5.read_tifr(),
             _ => 0
         }
     }
 
     fn read_external_u8(&self, addr: u16) -> u8 {
         match addr {
+            0x06F => self.timer1.read_timsk(),
+            0x071 => self.timer3.read_timsk(),
+            0x072 => self.timer4.read_timsk(),
+            0x073 => self.timer5.read_timsk(),
+
             0x080 => self.timer1.read_tccra(),
             0x081 => self.timer1.read_tccrb(),
+            0x082 => 0, // TCCRC
             0x084 => self.timer1.read_tcntl(),
             0x085 => self.timer1.read_tcnth(),
             0x088 => self.timer1.read_ocral(),
@@ -233,6 +249,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
             0x090 => self.timer3.read_tccra(),
             0x091 => self.timer3.read_tccrb(),
+            0x092 => 0, // TCCRC
             0x094 => self.timer3.read_tcntl(),
             0x095 => self.timer3.read_tcnth(),
             0x098 => self.timer3.read_ocral(),
@@ -244,6 +261,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
             0x0A0 => self.timer4.read_tccra(),
             0x0A1 => self.timer4.read_tccrb(),
+            0x0A2 => 0, // TCCRC
             0x0A4 => self.timer4.read_tcntl(),
             0x0A5 => self.timer4.read_tcnth(),
             0x0A8 => self.timer4.read_ocral(),
@@ -271,6 +289,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
             0x120 => self.timer5.read_tccra(),
             0x121 => self.timer5.read_tccrb(),
+            0x122 => 0, // TCCRC
             0x124 => self.timer5.read_tcntl(),
             0x125 => self.timer5.read_tcnth(),
             0x128 => self.timer5.read_ocral(),
@@ -313,6 +332,11 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
             0x12 => (6, self.gpio[6].write_pin(val)), // PING
             0x13 => (6, self.gpio[6].write_ddr(val)), // DDRG
             0x14 => (6, self.gpio[6].write_port(val)), // PORTG
+
+            0x16 => {self.timer1.write_tifr(val); (0, EMPTY)}
+            0x18 => {self.timer3.write_tifr(val); (0, EMPTY)}
+            0x19 => {self.timer4.write_tifr(val); (0, EMPTY)}
+            0x1A => {self.timer5.write_tifr(val); (0, EMPTY)}
             _ => {(0, EMPTY)}
         };
         update_changes(&mut self.output_changes, gpio_bank, changes, &mut self.gpio_pins)
@@ -321,8 +345,14 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
     fn write_external_u8(&mut self, addr: u16, val: u8) {
         const EMPTY: &[(PinId, PinState)] = &[];
         let (gpio_bank, changes) = match addr {
+            0x06F => {self.timer1.write_timsk(val); (0, EMPTY)}
+            0x071 => {self.timer3.write_timsk(val); (0, EMPTY)}
+            0x072 => {self.timer4.write_timsk(val); (0, EMPTY)}
+            0x073 => {self.timer5.write_timsk(val); (0, EMPTY)}
+
             0x080 => {self.timer1.write_tccra(val, &mut self.output_changes, &mut self.gpio_pins); (0, EMPTY)}
             0x081 => {self.timer1.write_tccrb(val); (0, EMPTY)}
+            0x082 => todo!(),
             0x084 => {self.timer1.write_tcntl(val); (0, EMPTY)}
             0x085 => {self.timer1.write_tcnth(val); (0, EMPTY)}
             0x088 => {self.timer1.write_ocral(val); (0, EMPTY)}
@@ -334,6 +364,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
             0x090 => {self.timer3.write_tccra(val, &mut self.output_changes, &mut self.gpio_pins); (0, EMPTY)}
             0x091 => {self.timer3.write_tccrb(val); (0, EMPTY)}
+            0x092 => todo!(),
             0x094 => {self.timer3.write_tcntl(val); (0, EMPTY)}
             0x095 => {self.timer3.write_tcnth(val); (0, EMPTY)}
             0x098 => {self.timer3.write_ocral(val); (0, EMPTY)}
@@ -345,6 +376,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
             0x0A0 => {self.timer4.write_tccra(val, &mut self.output_changes, &mut self.gpio_pins); (0, EMPTY)}
             0x0A1 => {self.timer4.write_tccrb(val); (0, EMPTY)}
+            0x0A2 => todo!(),
             0x0A4 => {self.timer4.write_tcntl(val); (0, EMPTY)}
             0x0A5 => {self.timer4.write_tcnth(val); (0, EMPTY)}
             0x0A8 => {self.timer4.write_ocral(val); (0, EMPTY)}
@@ -372,6 +404,7 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
 
             0x120 => {self.timer5.write_tccra(val, &mut self.output_changes, &mut self.gpio_pins); (0, EMPTY)}
             0x121 => {self.timer5.write_tccrb(val); (0, EMPTY)}
+            0x122 => todo!(),
             0x124 => {self.timer5.write_tcntl(val); (0, EMPTY)}
             0x125 => {self.timer5.write_tcnth(val); (0, EMPTY)}
             0x128 => {self.timer5.write_ocral(val); (0, EMPTY)}
@@ -449,11 +482,64 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
         for gpio_bank in self.gpio.iter_mut() {
             gpio_bank.clock_rising_edge();
         }
-        self.timer1.tick_prescaler(self.timer_prescaler, &mut self.output_changes);
+        self.timer1.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
         self.timer_prescaler = (self.timer_prescaler + 1) % 1024;
     }
 
     fn clock_falling_edge(&mut self) {
         self.clock_pin = PinState::Low;
+    }
+
+    #[inline]
+    fn has_interrupt(&self) -> bool {
+        self.interrupt
+    }
+
+    fn get_interrupt_address(&mut self) -> Option<u16> {
+        let mut result = None;
+        let mut have_others = false;
+        fn update(addr: u16, result: &mut Option<u16>, have_others: &mut bool, flag: &mut bool) {
+            if *flag {
+                *result = match result {
+                    None => {
+                        *flag = false;
+                        Some(addr)
+                    },
+                    Some(x) => {
+                        *have_others = true; 
+                        Some(*x)
+                    },
+                }
+            }
+        }
+
+        update(0x0020, &mut result, &mut have_others, &mut self.timer1.interrupt_flags.input_capture);
+        update(0x0022, &mut result, &mut have_others, &mut self.timer1.interrupt_flags.oc[0]);
+        update(0x0024, &mut result, &mut have_others, &mut self.timer1.interrupt_flags.oc[1]);
+        update(0x0026, &mut result, &mut have_others, &mut self.timer1.interrupt_flags.oc[2]);
+        update(0x0028, &mut result, &mut have_others, &mut self.timer1.interrupt_flags.overflow);
+        
+        update(0x003E, &mut result, &mut have_others, &mut self.timer3.interrupt_flags.input_capture);
+        update(0x0040, &mut result, &mut have_others, &mut self.timer3.interrupt_flags.oc[0]);
+        update(0x0042, &mut result, &mut have_others, &mut self.timer3.interrupt_flags.oc[1]);
+        update(0x0044, &mut result, &mut have_others, &mut self.timer3.interrupt_flags.oc[2]);
+        update(0x0046, &mut result, &mut have_others, &mut self.timer3.interrupt_flags.overflow);
+
+        update(0x0052, &mut result, &mut have_others, &mut self.timer4.interrupt_flags.input_capture);
+        update(0x0054, &mut result, &mut have_others, &mut self.timer4.interrupt_flags.oc[0]);
+        update(0x0056, &mut result, &mut have_others, &mut self.timer4.interrupt_flags.oc[1]);
+        update(0x0058, &mut result, &mut have_others, &mut self.timer4.interrupt_flags.oc[2]);
+        update(0x005A, &mut result, &mut have_others, &mut self.timer4.interrupt_flags.overflow);
+
+        update(0x005C, &mut result, &mut have_others, &mut self.timer5.interrupt_flags.input_capture);
+        update(0x005E, &mut result, &mut have_others, &mut self.timer5.interrupt_flags.oc[0]);
+        update(0x0060, &mut result, &mut have_others, &mut self.timer5.interrupt_flags.oc[1]);
+        update(0x0062, &mut result, &mut have_others, &mut self.timer5.interrupt_flags.oc[2]);
+        update(0x0064, &mut result, &mut have_others, &mut self.timer5.interrupt_flags.overflow);
+        
+        if !have_others {
+            self.interrupt = false;
+        }
+        result
     }
 }

@@ -175,6 +175,13 @@ where
 
         self.jump_if(self.sreg.bit(s), k)
     }
+
+    pub fn execute_interrupt(&mut self, addr: u16) -> u8 {
+        self.pc -= 1;
+        self.push_pc();
+        self.set_pc(addr as u32);
+        5
+    }
 }
 
 #[cfg(test)]

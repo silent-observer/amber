@@ -6,7 +6,7 @@ extern crate timeit;
 fn main() {
     let mut board = Board::new("out.vcd", 16e6);
     let mut mcu = Atmega2560::new();
-    mcu.load_flash_hex("hex/blink_timer.hex");
+    mcu.load_flash_hex("hex/blink_timer_interrupt.hex");
 
     let mcu = board.add_component_threadless(
         mcu, "mcu", 
