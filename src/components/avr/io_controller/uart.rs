@@ -78,6 +78,9 @@ impl Uart {
     }
 
     pub fn tick(&mut self, output_changes: &mut Vec<(PinId, PinState)>, interrupt: &mut bool) {
+        if !self.transmitter_enabled && !self.reciever_enabled {
+            return;
+        }
         if self.counter == 0 {
             self.counter = self.ubbr;
             self.prescaler = (self.prescaler + 1) % 16;

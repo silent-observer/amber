@@ -1,10 +1,11 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{HashMap, BinaryHeap};
 use std::rc::Rc;
 use std::thread::{JoinHandle, spawn};
 use kanal;
 
-use crate::component::{Component, ComponentId, Message, ThreadlessComponent};
+use crate::component::{Component, ComponentId, Message, ThreadlessComponent, ExecuteStepResult};
 use crate::pins::{PinId, PinState};
 use crate::vcd::{VcdTree, VcdWriter, VcdConfig, VcdTreeHandle};
 
@@ -38,9 +39,9 @@ impl ThreadedComponentData {
     }
 
     /// Send [Message::Step].
-    fn notify_step(&self) {
+    fn notify_step(&self,time_ns: f64) {
         self.input_tx
-            .send(Message::Step)
+            .send(Message::Step(time_ns))
             .expect("Error sending update");
     }
 
@@ -85,18 +86,18 @@ impl ThreadlessComponentData {
     }
 
     /// Send [Message::ClockRising].
-    fn clock_rising_edge(&mut self) -> (bool, &[(PinId, PinState)]) {
+    fn clock_rising_edge(&mut self) -> ExecuteStepResult {
         self.component.clock_rising_edge_threadless(&self.vcd)
     }
 
     /// Send [Message::ClockFalling].
-    fn clock_falling_edge(&mut self) -> (bool, &[(PinId, PinState)]) {
+    fn clock_falling_edge(&mut self) -> ExecuteStepResult {
         self.component.clock_falling_edge_threadless(&self.vcd)
     }
 
     /// Send [Message::Step].
-    fn execute_step(&mut self) -> (bool, &[(PinId, PinState)]) {
-        self.component.execute_step_threadless(&self.vcd)
+    fn execute_step(&mut self, time_ns: f64) -> ExecuteStepResult {
+        self.component.execute_step_threadless(&self.vcd, time_ns)
     }
 }
 
@@ -192,6 +193,29 @@ struct Pin {
     out_state: PinState,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct PingEvent(ComponentId, f64);
+
+impl PartialEq for PingEvent {
+    fn eq(&self, other: &Self) -> bool {
+        self.1 == other.1
+    }
+}
+
+impl Eq for PingEvent {}
+
+impl Ord for PingEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        f64::total_cmp(&self.1, &other.1)
+    }
+}
+
+impl PartialOrd for PingEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Top-level element of a simulation. A board containing multiple components.
 pub struct Board {
     /// Channel for recieving messages from the component.
@@ -205,6 +229,8 @@ pub struct Board {
     pins: Vec<Pin>,
     /// Vector of all wires. Indexed by [WireId]
     wires: Vec<Wire>,
+    /// Binary heap for storing all the pending events.
+    events: BinaryHeap<PingEvent>,
 
     common_component_data: Vec<CommonComponentData>,
 
@@ -212,6 +238,9 @@ pub struct Board {
 
     /// A VCD file writer.
     vcd_writer: VcdWriter,
+
+    /// Nanoseconds per step.
+    clock_period: f64,
 }
 pub struct ComponentHandle {
     id: ComponentId,
@@ -246,7 +275,9 @@ impl Board {
             common_component_data: Vec::new(),
             clock_pin: false,
             
-            vcd_writer: VcdWriter::new(vcd_path, freq),
+            vcd_writer: VcdWriter::new(vcd_path),
+            clock_period: 5e8 / freq,
+            events: BinaryHeap::new(),
         }
     }
 
@@ -458,7 +489,7 @@ impl Board {
         loop {
             for m in &mut output_rx {
                 match m {
-                    Message::Step |
+                    Message::Step(_) |
                     Message::ClockFalling |
                     Message::ClockRising |
                     Message::Die => panic!("This shouldn't happen"),
@@ -473,18 +504,41 @@ impl Board {
                         let index = self.common_component_data[component_id.0].pins[pin_id as usize];
                         self.set_pin(index, state);
                     }
+                    Message::PingMeAt(id, time) => {
+                        self.events.push(PingEvent(id, time));
+                    },
                 }
             }
         }
         self.output_rx = Some(output_rx);
     }
 
+    fn handle_events(&mut self, current_time: f64) {
+        // Check if there are any pending events ready
+        while let Some(PingEvent(id, time_ns)) = self.events.peek().copied() {
+            if time_ns <= current_time {
+                self.events.pop();
+                let data = &self.common_component_data[id.0];
+                if data.is_threaded {
+                    self.threaded_components[data.index].is_changed = true;
+                } else {
+                    self.threadless_components[data.index].is_changed = true;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     /// Toggle a clock pin once.
     /// 
     /// Returns whether VCD has changed.
     #[inline]
-    fn toggle_clock(&mut self, global_output_changes: &mut Vec<(PinIndex, PinState)>) {
+    fn toggle_clock(&mut self, global_output_changes: &mut Vec<(PinIndex, PinState)>, time_ns: f64) {
         self.clock_pin = !self.clock_pin;
+
+        self.handle_events(time_ns);
+
         global_output_changes.clear();
         for c in self.threaded_components.iter_mut() {
             if c.is_clocked {
@@ -494,26 +548,31 @@ impl Board {
                     c.notify_clock_falling_edge()
                 }
             } else if c.is_changed {
-                c.notify_step()
+                c.notify_step(time_ns)
             }
         }
         for c in self.threadless_components.iter_mut() {
             let id = c.id.0;
-            let (vcd_changed, output_changes) = if c.is_clocked {
+            let result = if c.is_clocked {
                 if self.clock_pin {
                     c.clock_rising_edge()
                 } else {
                     c.clock_falling_edge()
                 }
             } else if c.is_changed {
-                c.execute_step()
+                c.execute_step(time_ns)
             } else {
                 continue;
             };
-            if vcd_changed {
+
+            if let Some(time_ns) = result.time_ns {
+                self.events.push(PingEvent(ComponentId(id), time_ns));
+            }
+
+            if result.changed {
                 self.vcd_writer.set_change(id);
             }
-            for &(pin_id, state) in output_changes.iter() {
+            for &(pin_id, state) in result.output_changes.iter() {
                 let index = self.common_component_data[id].pins[pin_id as usize];
                 global_output_changes.push((index, state));
             }
@@ -551,8 +610,9 @@ impl Board {
         let mut global_output_changes = Vec::new();
 
         for i in 0..cycles*2 {
-            self.toggle_clock(&mut global_output_changes);
-            self.vcd_writer.write_step();
+            let time_ns = i as f64 * self.clock_period;
+            self.toggle_clock(&mut global_output_changes, time_ns);
+            self.vcd_writer.write_step(time_ns + self.clock_period);
             if (i+1) % 2_000_000 == 0 {
                 progress.inc(1);
             }

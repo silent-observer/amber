@@ -1,4 +1,4 @@
-use amber::{board::Board, components::{avr::Atmega2560, led::Led}, vcd::config::{VcdConfig}, vcd_config};
+use amber::{board::Board, components::{avr::Atmega2560, led::Led, uart::Uart}, vcd::config::{VcdConfig}, vcd_config};
 
 #[macro_use]
 extern crate timeit;
@@ -18,6 +18,11 @@ fn main() {
         });
     board.add_clock_wire(&mcu);
 
+    let uart = Uart::<8>::new(9600.0, Some(false));
+    let uart = board.add_component(
+        uart, "uart",
+        &VcdConfig::Enable);
+
     let xck_led = Led::new();
     let xck_led = board.add_component(
         xck_led, "xck_led", 
@@ -29,9 +34,9 @@ fn main() {
         &VcdConfig::Enable);
 
     board.add_wire(&[mcu.pin("PE2"), xck_led.pin("LED")]);
-    board.add_wire(&[mcu.pin("PE1"), tx_led.pin("LED")]);
+    board.add_wire(&[mcu.pin("PE1"), tx_led.pin("LED"), uart.pin("RX")]);
 
-    timeit_loops!(1, {
+    //timeit_loops!(1, {
         board.simulate(16000000);
-    });
+    //});
 }

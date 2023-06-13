@@ -68,7 +68,7 @@ where
         IoController::<M>::pin_count()
     }
 
-    fn advance(&mut self) {}
+    fn advance(&mut self, _time_ns: f64) -> Option<f64> {None}
 
     fn set_pin(&mut self, pin: PinId, state: PinState) {
         self.mcu.io.set_pin(pin, state)

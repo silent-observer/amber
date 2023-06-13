@@ -65,7 +65,11 @@ pub enum PinVec {
         size: u8,
         bits: u32,
     },
-    //Big(Vec<PinState>)
+    //Big(Vec<PinState>),
+    Repeated {
+        size: u8,
+        state: PinState,
+    },
 }
 
 pub struct PinVecIter<'a> {
@@ -78,11 +82,10 @@ impl PinVec {
         if size == 1 {
             PinVec::SinglePin(val)
         } else {
-            let mut bits = 0;
-            for i in 0..size {
-                bits.set_bit(i as usize, val == PinState::High);
+            PinVec::Repeated {
+                size,
+                state: val
             }
-            PinVec::SmallLogical { size, bits }
         }
     }
 
@@ -100,6 +103,8 @@ impl PinVec {
         match self {
             PinVec::SinglePin(_) => 1,
             PinVec::SmallLogical { size, .. } => *size,
+            //PinVec::Big(v) => v.len() as u8,
+            PinVec::Repeated { size, .. } => *size,
         }
     }
 
@@ -129,6 +134,19 @@ impl Iterator for PinVecIter<'_> {
                         self.pos -= 1;
                         Some(PinState::Low)
                     }
+                } else {None}
+            },
+            // PinVec::Big(v) => {
+            //     if self.pos >= 0 {
+            //         let r = v[self.pos as usize];
+            //         self.pos -= 1;
+            //         Some(r)
+            //     } else {None}
+            // },
+            PinVec::Repeated {state, .. } => {
+                if self.pos >= 0 {
+                    self.pos -= 1;
+                    Some(*state)
                 } else {None}
             },
         }

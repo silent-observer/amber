@@ -19,13 +19,11 @@ impl Component for Led {
         1
     }
 
-    fn advance(&mut self) {}
+    fn advance(&mut self, _time_ns: f64) -> Option<f64> {None}
 
     fn set_pin(&mut self, pin: PinId, state: PinState) {
         assert!(pin == 0);
         self.state = state;
-        if self.state == PinState::High || self.state == PinState::Low {
-        }
     }
 
     fn get_output_changes(&mut self) -> &[(PinId, PinState)] {

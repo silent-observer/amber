@@ -18,10 +18,6 @@ pub struct VcdWriter {
     forest: VcdForest,
 
     changes: Vec<bool>,
-    /// Current step
-    counter: u64,
-    /// Nanoseconds per step
-    period: f64,
 }
 
 impl VcdWriter {
@@ -29,15 +25,13 @@ impl VcdWriter {
     /// 
     /// `path` is path to output .vcd file.
     /// `freq` is step frequency in Hz.
-    pub fn new(path: &str, freq: f64) -> VcdWriter {
+    pub fn new(path: &str) -> VcdWriter {
         let f = File::create(path).expect("Couldn't create file");
         VcdWriter { 
             f: BufWriter::new(f),
             wire_id: vec![33],
             forest: VcdForest::new(),
             changes: Vec::new(),
-            counter: 1,
-            period: 5e8 / freq
         }
     }
 
@@ -232,13 +226,11 @@ impl VcdWriter {
     }
 
     /// Writes a single step into a .vcd file.
-    pub fn write_step(&mut self) {
+    pub fn write_step(&mut self, time_ns: f64) {
         if self.has_changed() {
-            write!(&mut self.f, "#{}\n", (self.counter as f64 * self.period).round() as u64).expect("Couldn't write timestep");
-            self.counter += 1;
+            write!(&mut self.f, "#{}\n", time_ns.round() as u64).expect("Couldn't write timestep");
             Self::write_data_forest(&mut self.f, &mut self.forest, &self.changes, false);
         } else {
-            self.counter += 1;
         }
         self.reset_changes();
     }

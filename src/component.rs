@@ -30,9 +30,11 @@ pub struct ComponentId(pub usize);
 #[derive(Debug, Clone)]
 pub enum Message {
     /// Board to Component: advance a single step accounting for all the changes.
-    Step,
+    Step(f64),
     ClockRising,
     ClockFalling,
+    
+    PingMeAt(ComponentId, f64),
     /// Component to Board: sent after Step is done. Contains whether VCD has changed
     Done(ComponentId, bool),
     /// Board to Component: stop component thread.
@@ -75,7 +77,7 @@ pub trait Component: Send + VcdFiller {
     /// Advance the simulation through one step.
     /// 
     /// After this step all the pin value changes must be accounted for.
-    fn advance(&mut self);
+    fn advance(&mut self, time_ns: f64) -> Option<f64>;
 
     /// Execute a single step and output all changes
     /// 
@@ -110,17 +112,21 @@ pub trait Component: Send + VcdFiller {
             match m {
                 Message::Die => break,
                 Message::PinChange(_, pin, state) => self.set_pin(pin, state),
-                Message::Done(_, _) => {},
-                Message::Step | Message::ClockRising | Message::ClockFalling => {
-                    match m {
-                        Message::Step => self.advance(),
-                        Message::ClockRising => self.clock_rising_edge(),
-                        Message::ClockFalling => self.clock_falling_edge(),
+                Message::Done(_, _) | Message::PingMeAt(_, _) => {},
+                Message::Step(_) | Message::ClockRising | Message::ClockFalling => {
+                    let ping = match m {
+                        Message::Step(x) => self.advance(x),
+                        Message::ClockRising => {self.clock_rising_edge(); None},
+                        Message::ClockFalling => {self.clock_falling_edge(); None},
                         _ => panic!("Impossible!")
-                    }
+                    };
                     let (changed, output_changes) = self.fill_everything_threaded(&vcd);
                     for &(pin, state) in output_changes.iter() {
                         output_tx.send(Message::PinChange(id, pin, state))
+                                 .expect("Cannot send update");
+                    }
+                    if let Some(time) = ping {
+                        output_tx.send(Message::PingMeAt(id, time))
                                  .expect("Cannot send update");
                     }
                     output_tx.send(Message::Done(id, changed))
@@ -131,11 +137,17 @@ pub trait Component: Send + VcdFiller {
     }
 }
 
+pub struct ExecuteStepResult<'a> {
+    pub changed: bool,
+    pub output_changes: &'a [(PinId, PinState)],
+    pub time_ns: Option<f64>
+}
+
 pub trait ThreadlessComponent {
     fn set_pin(&mut self, pin: PinId, state: PinState);
-    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]);
-    fn clock_rising_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]);
-    fn clock_falling_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]);
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, time_ns: f64) -> ExecuteStepResult;
+    fn clock_rising_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> ExecuteStepResult;
+    fn clock_falling_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> ExecuteStepResult;
 }
 
 impl<T: Component> ThreadlessComponent for T {
@@ -143,18 +155,33 @@ impl<T: Component> ThreadlessComponent for T {
         self.set_pin(pin, state);
     }
 
-    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]) {
-        self.advance();
-        self.fill_everything_threadless(vcd)
+    fn execute_step_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>, time_ns: f64) -> ExecuteStepResult {
+        let ping = self.advance(time_ns);
+        let (changed, output_changes) = self.fill_everything_threadless(vcd);
+        ExecuteStepResult {
+            changed,
+            output_changes,
+            time_ns: ping,
+        }
     }
 
-    fn clock_rising_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]) {
+    fn clock_rising_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> ExecuteStepResult {
         self.clock_rising_edge();
-        self.fill_everything_threadless(vcd)
+        let (changed, output_changes) = self.fill_everything_threadless(vcd);
+        ExecuteStepResult {
+            changed,
+            output_changes,
+            time_ns: None,
+        }
     }
 
-    fn clock_falling_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> (bool, &[(PinId, PinState)]) {
+    fn clock_falling_edge_threadless(&mut self, vcd: &Rc<RefCell<VcdTreeHandle>>) -> ExecuteStepResult {
         self.clock_falling_edge();
-        self.fill_everything_threadless(vcd)
+        let (changed, output_changes) = self.fill_everything_threadless(vcd);
+        ExecuteStepResult {
+            changed,
+            output_changes,
+            time_ns: None,
+        }
     }
 }
