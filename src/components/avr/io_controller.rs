@@ -7,7 +7,7 @@ use mockall::*;
 
 use crate::pins::{PinId, PinState};
 
-use self::{gpio::GpioPort, timer16::Timer16, uart::Uart};
+use self::{gpio::GpioPort, timer16::Timer16, uart::UartController};
 
 use super::mcu_model::McuModel;
 
@@ -65,7 +65,7 @@ pub struct IoController<M: McuModel> {
     timer4: Timer16,
     timer5: Timer16,
 
-    uart0: Uart,
+    uart0: UartController,
 
     gpio_pins: [(bool, PinState); 86],
 }
@@ -84,7 +84,7 @@ impl<M: McuModel + 'static> IoController<M>{
             timer3: Timer16::new([Self::PIN_PE3, Self::PIN_PE4, Self::PIN_PE5]),
             timer4: Timer16::new([Self::PIN_PH3, Self::PIN_PH4, Self::PIN_PH5]),
             timer5: Timer16::new([Self::PIN_PL3, Self::PIN_PL4, Self::PIN_PL5]),
-            uart0: Uart::new(Self::PIN_PE2, Self::PIN_PE1),
+            uart0: UartController::new(Self::PIN_PE2, Self::PIN_PE1),
         }
     }
 }
@@ -506,10 +506,18 @@ impl<M: McuModel + 'static> IoControllerTrait for IoController<M> {
         for gpio_bank in self.gpio.iter_mut() {
             gpio_bank.clock_rising_edge();
         }
-        self.timer1.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
-        self.timer3.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
-        self.timer4.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
-        self.timer5.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        if self.timer1.enabled() {
+            self.timer1.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        }
+        if self.timer3.enabled() {
+            self.timer3.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        }
+        if self.timer4.enabled() {
+            self.timer4.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        }
+        if self.timer5.enabled() {
+            self.timer5.tick_prescaler(self.timer_prescaler, &mut self.output_changes, &mut self.interrupt);
+        }
         self.timer_prescaler = (self.timer_prescaler + 1) % 1024;
 
         self.uart0.tick(&mut self.output_changes, &mut self.interrupt);

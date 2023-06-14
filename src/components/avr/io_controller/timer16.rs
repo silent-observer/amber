@@ -14,7 +14,7 @@ enum CompareOutputMode {
 
 #[allow(dead_code)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ClockMode {
     Disabled = 0,
     Clk1 = 1,
@@ -167,6 +167,11 @@ impl Timer16 {
                 output_changes.push((self.pin_ids[i], PinState::Low))
             }
         }
+    }
+    
+    #[inline]
+    pub fn enabled(&self) -> bool {
+        self.clock_mode != ClockMode::Disabled
     }
 
     pub fn tick_prescaler(&mut self, prescaler: u16, output_changes: &mut Vec<(PinId, PinState)>, interrupt: &mut bool) {

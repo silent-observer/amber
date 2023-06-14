@@ -69,11 +69,11 @@ impl<const CHAR_SIZE: u8> Uart<CHAR_SIZE> {
                 self.rx_frame_error = true;
             }
             if self.rx_frame_error {
-                println!("Frame error!");
+                // println!("Frame error!");
             } else if self.rx_parity_error {
-                println!("Parity error!");
+                // println!("Parity error!");
             } else {
-                println!("{:02X}", self.rx_data);
+                // println!("{:02X}", self.rx_data);
                 self.rx_data_ready = Some(self.rx_data);
             }
             self.rx_pos = -1;

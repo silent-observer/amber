@@ -230,8 +230,7 @@ impl VcdWriter {
         if self.has_changed() {
             write!(&mut self.f, "#{}\n", time_ns.round() as u64).expect("Couldn't write timestep");
             Self::write_data_forest(&mut self.f, &mut self.forest, &self.changes, false);
-        } else {
+            self.reset_changes();
         }
-        self.reset_changes();
     }
 }

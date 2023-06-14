@@ -16,7 +16,7 @@ enum ParityMode {
     Odd = 3,
 }
 
-pub struct Uart {
+pub struct UartController {
     ubbr: u16,
     counter: u16,
     xck_pin: PinId,
@@ -45,9 +45,9 @@ pub struct Uart {
     transmitter_parity: bool,
 }
 
-impl Uart {
-    pub fn new(xck_pin: PinId, tx_pin: PinId) -> Uart {
-        Uart { 
+impl UartController {
+    pub fn new(xck_pin: PinId, tx_pin: PinId) -> UartController {
+        UartController { 
             ubbr: 0,
             counter: 0,
             xck_pin,
