@@ -481,7 +481,7 @@ impl Board {
     }
 
     /// Handle [messages](Message) for a single step of simulation.
-    pub fn handle_messages(&mut self, mut done_counter: i32) {
+    fn handle_messages(&mut self, mut done_counter: i32) {
         if done_counter == 0 {return;}
 
         let mut output_rx = self.output_rx.take().expect("Has to have output reciever");
@@ -513,6 +513,7 @@ impl Board {
         self.output_rx = Some(output_rx);
     }
 
+    #[inline]
     fn handle_events(&mut self, current_time: f64) {
         // Check if there are any pending events ready
         while let Some(PingEvent(id, time_ns)) = self.events.peek().copied() {
@@ -540,6 +541,7 @@ impl Board {
         self.handle_events(time_ns);
 
         global_output_changes.clear();
+        let mut done_counter = 0;
         for c in self.threaded_components.iter_mut() {
             if c.is_clocked {
                 if self.clock_pin {
@@ -548,6 +550,8 @@ impl Board {
                     c.notify_clock_falling_edge()
                 }
             } else if c.is_changed {
+                done_counter += 1;
+                c.is_changed = false;
                 c.notify_step(time_ns)
             }
         }
@@ -576,16 +580,6 @@ impl Board {
                 let index = self.common_component_data[id].pins[pin_id as usize];
                 global_output_changes.push((index, state));
             }
-        }
-
-        let mut done_counter = 0;
-        for c in self.threaded_components.iter_mut() {
-            if c.is_changed {
-                done_counter += 1;
-                c.is_changed = false;
-            }
-        }
-        for c in self.threadless_components.iter_mut() {
             c.is_changed = false;
         }
 
@@ -609,10 +603,11 @@ impl Board {
         
         let mut global_output_changes = Vec::new();
 
+        let mut time_ns = 0.0;
         for i in 0..cycles*2 {
-            let time_ns = i as f64 * self.clock_period;
             self.toggle_clock(&mut global_output_changes, time_ns);
             self.vcd_writer.write_step(time_ns + self.clock_period);
+            time_ns += self.clock_period;
             if (i+1) % 2_000_000 == 0 {
                 progress.inc(1);
             }

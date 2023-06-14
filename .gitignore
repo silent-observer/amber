@@ -2,3 +2,5 @@
 *.vcd
 *.svg
 callgrind.out.*
+cachegrind.out.*
+perf.*
