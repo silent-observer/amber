@@ -123,7 +123,7 @@ pub trait Component: Send + VcdFiller {
                     let (changed, output_changes) = self.fill_everything_threaded(&vcd);
                     for &(pin, state) in output_changes.iter() {
                         output_tx.send(Message::PinChange(id, pin, state))
-                                 .expect("Cannot send update");
+                                 .expect("Cannot send up .date");
                     }
                     if let Some(time) = ping {
                         output_tx.send(Message::PingMeAt(id, time))

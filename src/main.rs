@@ -8,7 +8,7 @@ fn main() {
     let mut mcu = Atmega2560::new();
     mcu.load_flash_hex("hex/uart_test.hex");
 
-    let mcu = board.add_component_threadless(
+    let mcu = board.add_component_clocked(
         mcu, "mcu", 
         
         &vcd_config!{
@@ -16,20 +16,19 @@ fn main() {
             // regs
             // pc
         });
-    board.add_clock_wire(&mcu);
 
     let uart = Uart::<8>::new(9600.0, Some(false));
-    let uart = board.add_component_threadless(
+    let uart = board.add_component_threaded(
         uart, "uart",
         &VcdConfig::Enable);
 
     let xck_led = Led::new();
-    let xck_led = board.add_component_threadless(
+    let xck_led = board.add_component_threaded(
         xck_led, "xck_led", 
         &VcdConfig::Enable);
 
     let tx_led = Led::new();
-    let tx_led = board.add_component_threadless(
+    let tx_led = board.add_component_threaded(
         tx_led, "tx_led", 
         &VcdConfig::Enable);
 
